@@ -40,6 +40,20 @@ target_link_libraries(sample_service
     PRIVATE
         elap_platform)
 
+add_executable(ipc_echo_server
+    applications/ipc_echo_server/main.cpp)
+
+target_link_libraries(ipc_echo_server
+    PRIVATE
+        elap_platform)
+
+add_executable(ipc_echo_client
+    applications/ipc_echo_client/main.cpp)
+
+target_link_libraries(ipc_echo_client
+    PRIVATE
+        elap_platform)
+
 if(ELAP_BUILD_TESTS)
     enable_testing()
 
@@ -66,4 +80,11 @@ if(ELAP_BUILD_TESTS)
         COMMAND bash
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/sample_service_invalid_config_test.sh
             $<TARGET_FILE:sample_service>)
+
+    add_test(
+        NAME ipc_echo_process_round_trip
+        COMMAND bash
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/ipc_echo_process_test.sh
+            $<TARGET_FILE:ipc_echo_server>
+            $<TARGET_FILE:ipc_echo_client>)
 endif()

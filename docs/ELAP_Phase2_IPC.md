@@ -27,6 +27,16 @@ The Unix socket API uses stream sockets with length-prefixed messages.
 This hides partial read/write handling from service code while keeping
 the transport simple and Linux-native.
 
+Sample executables:
+
+- `ipc_echo_server`
+- `ipc_echo_client`
+
+The echo sample proves the IPC wrapper works across separate Linux
+processes. The server listens on a Unix domain socket, accepts one
+client, receives one framed message, replies with an `echo:` prefix, and
+exits.
+
 ## Message Framing
 
 Each message is encoded as:
@@ -50,6 +60,13 @@ Unit coverage validates:
 - Closed connection error handling
 - Receive size-limit enforcement
 
+Integration coverage validates:
+
+- Starting the echo server as a separate process
+- Connecting with the echo client as a separate process
+- Exchanging a framed request/reply message across the Unix socket
+- Clean server exit after the request is handled
+
 Unix domain socket bind/listen may require running tests outside heavily
 restricted sandboxes.
 
@@ -57,12 +74,9 @@ restricted sandboxes.
 
 Recommended next activities:
 
-1. Add an IPC echo sample service or extend `sample_service` with an IPC
-   control endpoint.
-2. Add integration tests for IPC request/response across a real process
-   boundary.
-3. Add POSIX message queue wrapper for lightweight asynchronous
+1. Extend `sample_service` with an IPC control endpoint.
+2. Add POSIX message queue wrapper for lightweight asynchronous
    commands.
-4. Add shared memory support for larger data payloads.
-5. Build the event bus abstraction on top of the selected IPC
+3. Add shared memory support for larger data payloads.
+4. Build the event bus abstraction on top of the selected IPC
    primitives.
