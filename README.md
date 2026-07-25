@@ -43,10 +43,11 @@ This builds:
 - `build/sample_service`
 - `build/elap_unit_tests`
 
-## Run Unit Tests
+## Run Tests
 
 ```bash
-ctest --test-dir build
+cd build
+ctest --output-on-failure
 ```
 
 You can also run the test executable directly:
@@ -54,6 +55,9 @@ You can also run the test executable directly:
 ```bash
 ./build/elap_unit_tests
 ```
+
+The CTest suite includes unit tests and sample service integration tests
+for graceful shutdown and invalid configuration handling.
 
 ## Run Sample Service
 
@@ -108,5 +112,5 @@ messages.
 ## Current Phase 1 Status
 
 The current implementation covers the core Phase 1 runtime and sample
-service. The next planned milestone activity is to add an automated
-integration test for sample service graceful shutdown.
+service. It also includes an automated integration test for sample
+service graceful shutdown.

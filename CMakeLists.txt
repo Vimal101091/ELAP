@@ -51,5 +51,17 @@ if(ELAP_BUILD_TESTS)
         PRIVATE
             elap_platform)
 
-    add_test(NAME elap_unit_tests COMMAND elap_unit_tests)
+    add_test(NAME elap_unit_tests COMMAND $<TARGET_FILE:elap_unit_tests>)
+
+    add_test(
+        NAME sample_service_graceful_shutdown
+        COMMAND bash
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/sample_service_shutdown_test.sh
+            $<TARGET_FILE:sample_service>)
+
+    add_test(
+        NAME sample_service_invalid_config
+        COMMAND bash
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/sample_service_invalid_config_test.sh
+            $<TARGET_FILE:sample_service>)
 endif()
