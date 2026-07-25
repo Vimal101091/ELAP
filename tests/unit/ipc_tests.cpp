@@ -1,7 +1,11 @@
+#include "elap/ipc/EventBus.hpp"
+#include "elap/ipc/PosixMessageQueue.hpp"
+#include "elap/ipc/SharedMemory.hpp"
 #include "elap/ipc/UnixSocket.hpp"
 
 #include <cassert>
 #include <chrono>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -11,6 +15,11 @@ namespace {
 std::string testSocketPath(const char* name)
 {
     return "/tmp/elap_" + std::string(name) + "_" + std::to_string(::getpid()) + ".sock";
+}
+
+std::string testObjectName(const char* name)
+{
+    return "/elap_" + std::string(name) + "_" + std::to_string(::getpid());
 }
 
 void runUnixSocketRoundTripTest()
@@ -81,10 +90,99 @@ void runUnixSocketValidationTest()
     server.close();
 }
 
+void runMessageQueueRoundTripTest()
+{
+    const auto name = testObjectName("mq_round_trip");
+    std::string error;
+
+    elap::ipc::PosixMessageQueue producer;
+    assert(producer.create(name, 4, 128, &error));
+    assert(producer.isOpen());
+    assert(producer.name() == name);
+    assert(producer.maxMessageSize() >= 128);
+
+    elap::ipc::PosixMessageQueue consumer;
+    assert(consumer.open(name, &error));
+    assert(consumer.isOpen());
+
+    assert(producer.sendMessage("command:start", 7, &error));
+
+    std::string message;
+    unsigned int priority = 0;
+    assert(consumer.receiveMessage(message, &priority, &error));
+    assert(message == "command:start");
+    assert(priority == 7);
+
+    assert(!producer.sendMessage(std::string(256, 'x'), 0, &error));
+    assert(!error.empty());
+
+    consumer.close();
+    producer.close();
+}
+
+void runSharedMemoryRoundTripTest()
+{
+    const auto name = testObjectName("shm_round_trip");
+    std::string error;
+
+    elap::ipc::SharedMemoryRegion writer;
+    assert(writer.create(name, 256, &error));
+    assert(writer.isMapped());
+    assert(writer.name() == name);
+    assert(writer.size() == 256);
+
+    elap::ipc::SharedMemoryRegion reader;
+    assert(reader.open(name, 256, &error));
+    assert(reader.isMapped());
+
+    const std::string payload = "shared-memory-payload";
+    assert(writer.write(16, payload.data(), payload.size(), &error));
+
+    char buffer[64] {};
+    assert(reader.read(16, buffer, payload.size(), &error));
+    assert(std::string(buffer, payload.size()) == payload);
+
+    assert(!reader.read(250, buffer, sizeof(buffer), &error));
+    assert(!error.empty());
+
+    reader.close();
+    writer.close();
+}
+
+void runEventBusRoundTripTest()
+{
+    const auto name = testObjectName("event_bus");
+    std::string error;
+
+    elap::ipc::MessageQueueEventBus publisher;
+    assert(publisher.create(name, 4, 256, &error));
+    assert(publisher.isOpen());
+
+    elap::ipc::MessageQueueEventBus subscriber;
+    assert(subscriber.open(name, &error));
+    assert(subscriber.isOpen());
+
+    assert(publisher.publish({"service.health", "state=running"}, &error));
+
+    elap::ipc::Event event;
+    assert(subscriber.receive(event, &error));
+    assert(event.topic == "service.health");
+    assert(event.payload == "state=running");
+
+    assert(!publisher.publish({"bad\ntopic", "payload"}, &error));
+    assert(!error.empty());
+
+    subscriber.close();
+    publisher.close();
+}
+
 void runIpcTests()
 {
     runUnixSocketRoundTripTest();
     runUnixSocketValidationTest();
+    runMessageQueueRoundTripTest();
+    runSharedMemoryRoundTripTest();
+    runEventBusRoundTripTest();
 }
 
 } // namespace

@@ -12,20 +12,33 @@ Planned Phase 2 components:
 - POSIX message queues
 - Event bus
 
-## Initial Implementation
+## Implementation
 
-The first Phase 2 slice adds Unix domain socket support under
-`elap::ipc`.
+Phase 2 IPC support lives under `elap::ipc`.
 
 Implemented classes:
 
 - `UnixSocketServer`
 - `UnixSocketClient`
 - `UnixSocketConnection`
+- `PosixMessageQueue`
+- `SharedMemoryRegion`
+- `MessageQueueEventBus`
 
 The Unix socket API uses stream sockets with length-prefixed messages.
 This hides partial read/write handling from service code while keeping
 the transport simple and Linux-native.
+
+The POSIX message queue API supports named queue creation/opening,
+priority send, receive, and queue cleanup. It is intended for small
+asynchronous commands and notifications.
+
+The shared memory API supports named region creation/opening, mapping,
+bounded read/write, and cleanup. It is intended for larger payloads where
+copying through sockets or queues would be wasteful.
+
+The event bus is currently backed by POSIX message queues. It encodes
+events as a topic plus payload and provides publish/receive operations.
 
 Sample executables:
 
@@ -67,6 +80,13 @@ Unit coverage validates:
 - Server-to-client reply
 - Closed connection error handling
 - Receive size-limit enforcement
+- POSIX message queue create/open/send/receive
+- POSIX message queue priority preservation
+- POSIX message queue size-limit rejection
+- Shared memory create/open/read/write
+- Shared memory bounds checking
+- Event bus publish/receive
+- Event topic validation
 
 Integration coverage validates:
 
@@ -78,15 +98,16 @@ Integration coverage validates:
 - Calling it from the sample IPC client
 - Graceful shutdown of the IPC listener thread
 
-Unix domain socket bind/listen may require running tests outside heavily
-restricted sandboxes.
+Unix domain socket bind/listen and POSIX IPC objects may require running
+tests outside heavily restricted sandboxes.
 
 ## Next Phase 2 Activities
 
 Recommended next activities:
 
-1. Add POSIX message queue wrapper for lightweight asynchronous
-   commands.
-2. Add shared memory support for larger data payloads.
-3. Build the event bus abstraction on top of the selected IPC
-   primitives.
+1. Add process-level samples or integration tests for POSIX message
+   queues.
+2. Add process-level samples or integration tests for shared memory.
+3. Add process-level samples or integration tests for the event bus.
+4. Decide whether the event bus should support fan-out delivery, topic
+   filtering, or multiple backend transports.

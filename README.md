@@ -20,10 +20,14 @@ Implemented Phase 1 components:
 Initial Phase 2 IPC support:
 
 - Unix domain socket server/client wrappers
+- POSIX message queue wrapper
+- Shared memory wrapper
+- Message-queue-backed event bus
 - Length-prefixed IPC message framing
 - Separate-process IPC echo server/client sample
 - Service-framework IPC server plus client sample
-- Unit coverage for Unix socket request/reply behavior
+- Unit coverage for Unix sockets, message queues, shared memory, and
+  event bus behavior
 
 Later phases will expand IPC and add storage, device framework support,
 health monitoring, production logging backends, plugins, security, OTA,
@@ -151,7 +155,8 @@ service graceful shutdown.
 
 ## Current Phase 2 Status
 
-Phase 2 has Unix domain socket IPC support with unit tests, a
-separate-process echo sample, and a service-framework IPC server/client
-sample. The next recommended activity is to add POSIX message queues and
-shared memory.
+Phase 2 has Unix domain socket IPC, POSIX message queue, shared memory,
+and event bus support. Unix sockets also have separate-process and
+service-framework integration coverage. The next recommended activity is
+to add process-level samples or integration tests for message queues,
+shared memory, and the event bus.

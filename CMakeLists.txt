@@ -15,6 +15,9 @@ find_package(Threads REQUIRED)
 
 add_library(elap_platform
     platform/src/config/KeyValueConfiguration.cpp
+    platform/src/ipc/EventBus.cpp
+    platform/src/ipc/PosixMessageQueue.cpp
+    platform/src/ipc/SharedMemory.cpp
     platform/src/ipc/UnixSocket.cpp
     platform/src/logging/ConsoleLogger.cpp
     platform/src/service/ServiceApplication.cpp
@@ -27,7 +30,8 @@ target_include_directories(elap_platform
 
 target_link_libraries(elap_platform
     PUBLIC
-        Threads::Threads)
+        Threads::Threads
+        rt)
 
 target_compile_options(elap_platform
     PRIVATE
