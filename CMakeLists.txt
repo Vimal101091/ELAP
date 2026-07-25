@@ -15,6 +15,7 @@ find_package(Threads REQUIRED)
 
 add_library(elap_platform
     platform/src/config/KeyValueConfiguration.cpp
+    platform/src/ipc/UnixSocket.cpp
     platform/src/logging/ConsoleLogger.cpp
     platform/src/service/ServiceApplication.cpp
     platform/src/signals/SignalHandler.cpp
@@ -44,6 +45,7 @@ if(ELAP_BUILD_TESTS)
 
     add_executable(elap_unit_tests
         tests/unit/config_tests.cpp
+        tests/unit/ipc_tests.cpp
         tests/unit/logger_tests.cpp
         tests/unit/thread_manager_tests.cpp)
 

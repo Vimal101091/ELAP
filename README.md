@@ -17,8 +17,14 @@ Implemented Phase 1 components:
 - Sample service that emits periodic heartbeat logs
 - Unit tests for core modules
 
-Later phases will add IPC, storage, device framework support, health
-monitoring, production logging backends, plugins, security, OTA,
+Initial Phase 2 IPC support:
+
+- Unix domain socket server/client wrappers
+- Length-prefixed IPC message framing
+- Unit coverage for Unix socket request/reply behavior
+
+Later phases will expand IPC and add storage, device framework support,
+health monitoring, production logging backends, plugins, security, OTA,
 supervision, and Yocto integration.
 
 ## Requirements
@@ -107,6 +113,7 @@ messages.
 
 - [Project strategy](docs/ELAP_Project_Strategy.md)
 - [Phase 1 high-level design](docs/ELAP_Phase1_HLD.md)
+- [Phase 2 IPC design](docs/ELAP_Phase2_IPC.md)
 - [Periodic sensor read flow](docs/PeriodicSensorReadFlow.md)
 
 ## Current Phase 1 Status
@@ -114,3 +121,9 @@ messages.
 The current implementation covers the core Phase 1 runtime and sample
 service. It also includes an automated integration test for sample
 service graceful shutdown.
+
+## Current Phase 2 Status
+
+Phase 2 has started with Unix domain socket IPC support. The next
+recommended activity is to add a real process-level IPC integration test
+or sample endpoint before adding POSIX message queues and shared memory.
