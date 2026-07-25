@@ -22,6 +22,7 @@ Initial Phase 2 IPC support:
 - Unix domain socket server/client wrappers
 - Length-prefixed IPC message framing
 - Separate-process IPC echo server/client sample
+- Service-framework IPC server plus client sample
 - Unit coverage for Unix socket request/reply behavior
 
 Later phases will expand IPC and add storage, device framework support,
@@ -50,6 +51,8 @@ This builds:
 - `build/sample_service`
 - `build/ipc_echo_server`
 - `build/ipc_echo_client`
+- `build/sample_ipc_server`
+- `build/sample_ipc_client`
 - `build/elap_unit_tests`
 
 ## Run Tests
@@ -66,7 +69,8 @@ You can also run the test executable directly:
 ```
 
 The CTest suite includes unit tests, sample service integration tests,
-and a separate-process IPC echo round-trip test.
+a separate-process IPC echo round-trip test, and a service-framework IPC
+server/client round-trip test.
 
 ## Run Sample Service
 
@@ -94,6 +98,26 @@ For a bounded manual smoke test:
 
 ```bash
 timeout --signal=INT 5s ./build/sample_service
+```
+
+## Run Sample IPC Apps
+
+Start the IPC server service:
+
+```bash
+./build/sample_ipc_server --config ./config/sample_ipc_server.conf
+```
+
+In another terminal, call it with the client:
+
+```bash
+./build/sample_ipc_client --socket /tmp/elap_sample_ipc_server.sock --message status
+```
+
+Expected response:
+
+```text
+sample_ipc_server:status
 ```
 
 ## Configuration
@@ -127,6 +151,7 @@ service graceful shutdown.
 
 ## Current Phase 2 Status
 
-Phase 2 has started with Unix domain socket IPC support. The next
-recommended activity is to extend `sample_service` with an IPC control
-endpoint before adding POSIX message queues and shared memory.
+Phase 2 has Unix domain socket IPC support with unit tests, a
+separate-process echo sample, and a service-framework IPC server/client
+sample. The next recommended activity is to add POSIX message queues and
+shared memory.

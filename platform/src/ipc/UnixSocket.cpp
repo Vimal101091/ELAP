@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <cstring>
 #include <limits>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -232,6 +233,37 @@ UnixSocketConnection UnixSocketServer::accept(std::string* errorMessage)
         }
         setError(errorMessage, systemError("accept"));
         return UnixSocketConnection {};
+    }
+}
+
+bool UnixSocketServer::tryAccept(UnixSocketConnection& connection,
+                                 std::chrono::milliseconds timeout,
+                                 std::string* errorMessage)
+{
+    connection.close();
+    if (!isListening()) {
+        setError(errorMessage, "accept failed: server is not listening");
+        return false;
+    }
+
+    pollfd descriptor {};
+    descriptor.fd = fd_;
+    descriptor.events = POLLIN;
+
+    while (true) {
+        const auto result = ::poll(&descriptor, 1, static_cast<int>(timeout.count()));
+        if (result > 0) {
+            connection = accept(errorMessage);
+            return connection.isOpen();
+        }
+        if (result == 0) {
+            return false;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        setError(errorMessage, systemError("poll"));
+        return false;
     }
 }
 

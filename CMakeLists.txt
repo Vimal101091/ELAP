@@ -54,6 +54,20 @@ target_link_libraries(ipc_echo_client
     PRIVATE
         elap_platform)
 
+add_executable(sample_ipc_server
+    applications/sample_ipc_server/main.cpp)
+
+target_link_libraries(sample_ipc_server
+    PRIVATE
+        elap_platform)
+
+add_executable(sample_ipc_client
+    applications/sample_ipc_client/main.cpp)
+
+target_link_libraries(sample_ipc_client
+    PRIVATE
+        elap_platform)
+
 if(ELAP_BUILD_TESTS)
     enable_testing()
 
@@ -87,4 +101,11 @@ if(ELAP_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/ipc_echo_process_test.sh
             $<TARGET_FILE:ipc_echo_server>
             $<TARGET_FILE:ipc_echo_client>)
+
+    add_test(
+        NAME sample_ipc_service_round_trip
+        COMMAND bash
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/sample_ipc_service_test.sh
+            $<TARGET_FILE:sample_ipc_server>
+            $<TARGET_FILE:sample_ipc_client>)
 endif()

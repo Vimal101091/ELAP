@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <string>
 
 namespace elap::ipc {
@@ -41,6 +42,9 @@ public:
 
     bool listen(const std::string& path, int backlog = 8, std::string* errorMessage = nullptr);
     UnixSocketConnection accept(std::string* errorMessage = nullptr);
+    bool tryAccept(UnixSocketConnection& connection,
+                   std::chrono::milliseconds timeout,
+                   std::string* errorMessage = nullptr);
     bool isListening() const;
     const std::string& path() const;
     void close();

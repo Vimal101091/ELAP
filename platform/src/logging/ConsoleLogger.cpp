@@ -68,6 +68,7 @@ void ConsoleLogger::log(LogLevel level, const char* component, const char* messa
     stream << utcTimestamp() << ' ' << toString(level) << ' '
            << (component == nullptr ? "unknown" : component) << ' '
            << (message == nullptr ? "" : message) << '\n';
+    stream.flush();
 }
 
 const char* toString(LogLevel level)

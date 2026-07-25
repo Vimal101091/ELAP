@@ -31,11 +31,19 @@ Sample executables:
 
 - `ipc_echo_server`
 - `ipc_echo_client`
+- `sample_ipc_server`
+- `sample_ipc_client`
 
 The echo sample proves the IPC wrapper works across separate Linux
 processes. The server listens on a Unix domain socket, accepts one
 client, receives one framed message, replies with an `echo:` prefix, and
 exits.
+
+The sample IPC server/client pair proves the same IPC mechanism inside
+the ELAP service framework. `sample_ipc_server` runs as a long-lived
+service, starts an IPC listener thread, handles framed requests, and
+shuts down cleanly on `SIGTERM` or `SIGINT`. `sample_ipc_client` sends a
+single request and prints the framed reply.
 
 ## Message Framing
 
@@ -66,6 +74,9 @@ Integration coverage validates:
 - Connecting with the echo client as a separate process
 - Exchanging a framed request/reply message across the Unix socket
 - Clean server exit after the request is handled
+- Starting the sample IPC server as an ELAP service
+- Calling it from the sample IPC client
+- Graceful shutdown of the IPC listener thread
 
 Unix domain socket bind/listen may require running tests outside heavily
 restricted sandboxes.
@@ -74,9 +85,8 @@ restricted sandboxes.
 
 Recommended next activities:
 
-1. Extend `sample_service` with an IPC control endpoint.
-2. Add POSIX message queue wrapper for lightweight asynchronous
+1. Add POSIX message queue wrapper for lightweight asynchronous
    commands.
-3. Add shared memory support for larger data payloads.
-4. Build the event bus abstraction on top of the selected IPC
+2. Add shared memory support for larger data payloads.
+3. Build the event bus abstraction on top of the selected IPC
    primitives.
