@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="1320" viewBox="0 0 1420 1320">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#344054"/>
+    </marker>
+    <style>
+      .title { font: 700 28px Arial, sans-serif; fill: #101828; }
+      .participant { fill: #f2f4f7; stroke: #667085; stroke-width: 1.5; rx: 6; }
+      .participant-text { font: 600 15px Arial, sans-serif; fill: #101828; text-anchor: middle; }
+      .lifeline { stroke: #98a2b3; stroke-width: 1.2; stroke-dasharray: 6 5; }
+      .activation { fill: #d1e9ff; stroke: #1570ef; stroke-width: 1.2; rx: 3; }
+      .message { stroke: #344054; stroke-width: 1.4; marker-end: url(#arrow); }
+      .return { stroke: #667085; stroke-width: 1.2; stroke-dasharray: 5 4; marker-end: url(#arrow); }
+      .label { font: 14px Arial, sans-serif; fill: #101828; }
+      .small { font: 12px Arial, sans-serif; fill: #475467; }
+      .loop { fill: #ecfdf3; stroke: #12b76a; stroke-width: 1.4; rx: 8; }
+      .shutdown { fill: #fff4ed; stroke: #f79009; stroke-width: 1.4; rx: 8; }
+      .section { font: 700 14px Arial, sans-serif; fill: #05603a; }
+      .section-shutdown { font: 700 14px Arial, sans-serif; fill: #b54708; }
+    </style>
+  </defs>
+
+  <rect width="1420" height="1320" fill="#ffffff"/>
+  <text x="710" y="42" class="title" text-anchor="middle">Periodic Sensor Read Service Flow</text>
+
+  <g id="participants">
+    <rect class="participant" x="30" y="80" width="140" height="54"/>
+    <text class="participant-text" x="100" y="103">OS / systemd</text>
+    <text class="participant-text" x="100" y="123">/ user</text>
+
+    <rect class="participant" x="200" y="80" width="120" height="54"/>
+    <text class="participant-text" x="260" y="112">main()</text>
+
+    <rect class="participant" x="350" y="80" width="160" height="54"/>
+    <text class="participant-text" x="430" y="112">ServiceApplication</text>
+
+    <rect class="participant" x="540" y="80" width="170" height="54"/>
+    <text class="participant-text" x="625" y="103">SensorReadService</text>
+    <text class="participant-text" x="625" y="123">(IService)</text>
+
+    <rect class="participant" x="740" y="80" width="150" height="54"/>
+    <text class="participant-text" x="815" y="112">ThreadManager</text>
+
+    <rect class="participant" x="920" y="80" width="150" height="54"/>
+    <text class="participant-text" x="995" y="103">sensor_reader</text>
+    <text class="participant-text" x="995" y="123">worker thread</text>
+
+    <rect class="participant" x="1100" y="80" width="140" height="54"/>
+    <text class="participant-text" x="1170" y="112">SensorDevice</text>
+
+    <rect class="participant" x="1270" y="80" width="130" height="54"/>
+    <text class="participant-text" x="1335" y="103">Sample</text>
+    <text class="participant-text" x="1335" y="123">Processor</text>
+  </g>
+
+  <line class="lifeline" x1="100" y1="134" x2="100" y2="1260"/>
+  <line class="lifeline" x1="260" y1="134" x2="260" y2="1260"/>
+  <line class="lifeline" x1="430" y1="134" x2="430" y2="1260"/>
+  <line class="lifeline" x1="625" y1="134" x2="625" y2="1260"/>
+  <line class="lifeline" x1="815" y1="134" x2="815" y2="1260"/>
+  <line class="lifeline" x1="995" y1="134" x2="995" y2="1260"/>
+  <line class="lifeline" x1="1170" y1="134" x2="1170" y2="1260"/>
+  <line class="lifeline" x1="1335" y1="134" x2="1335" y2="1260"/>
+
+  <line class="message" x1="100" y1="175" x2="260" y2="175"/>
+  <text class="label" x="155" y="166">start process</text>
+
+  <line class="message" x1="260" y1="225" x2="625" y2="225"/>
+  <text class="label" x="380" y="216">construct service</text>
+
+  <line class="message" x1="260" y1="275" x2="430" y2="275"/>
+  <text class="label" x="285" y="266">run(service, argc, argv)</text>
+
+  <line class="message" x1="430" y1="325" x2="430" y2="325"/>
+  <text class="label" x="450" y="318">install signal handlers</text>
+
+  <line class="message" x1="430" y1="375" x2="430" y2="375"/>
+  <text class="label" x="450" y="368">set state = Initializing</text>
+
+  <line class="message" x1="430" y1="425" x2="625" y2="425"/>
+  <text class="label" x="490" y="416">initialize()</text>
+  <rect class="activation" x="619" y="425" width="12" height="175"/>
+
+  <line class="message" x1="625" y1="470" x2="625" y2="470"/>
+  <text class="label" x="645" y="463">load configuration</text>
+
+  <line class="message" x1="625" y1="515" x2="1170" y2="515"/>
+  <text class="label" x="825" y="506">open()</text>
+
+  <line class="return" x1="1170" y1="555" x2="625" y2="555"/>
+  <text class="label" x="865" y="546">opened</text>
+
+  <line class="message" x1="625" y1="595" x2="625" y2="595"/>
+  <text class="label" x="645" y="588">validate read interval</text>
+
+  <line class="return" x1="625" y1="640" x2="430" y2="640"/>
+  <text class="label" x="515" y="631">true</text>
+
+  <line class="message" x1="430" y1="690" x2="430" y2="690"/>
+  <text class="label" x="450" y="683">set state = Starting</text>
+
+  <line class="message" x1="430" y1="740" x2="625" y2="740"/>
+  <text class="label" x="500" y="731">start()</text>
+  <rect class="activation" x="619" y="740" width="12" height="115"/>
+
+  <line class="message" x1="625" y1="780" x2="815" y2="780"/>
+  <text class="label" x="650" y="771">startThread("sensor_reader", worker)</text>
+
+  <line class="message" x1="815" y1="820" x2="995" y2="820"/>
+  <text class="label" x="855" y="811">create thread</text>
+
+  <line class="message" x1="995" y1="860" x2="625" y2="860"/>
+  <text class="label" x="725" y="851">runSensorReadLoop(stopToken)</text>
+  <rect class="activation" x="989" y="860" width="12" height="255"/>
+
+  <line class="return" x1="625" y1="900" x2="430" y2="900"/>
+  <text class="label" x="515" y="891">true</text>
+
+  <line class="message" x1="430" y1="940" x2="430" y2="940"/>
+  <text class="label" x="450" y="933">set state = Running</text>
+
+  <rect class="loop" x="900" y="965" width="475" height="165"/>
+  <text class="section" x="918" y="990">loop: every readIntervalMs while stop not requested</text>
+
+  <line class="message" x1="995" y1="1020" x2="1170" y2="1020"/>
+  <text class="label" x="1048" y="1011">read()</text>
+
+  <line class="return" x1="1170" y1="1055" x2="995" y2="1055"/>
+  <text class="label" x="1035" y="1046">sensor sample</text>
+
+  <line class="message" x1="995" y1="1090" x2="1335" y2="1090"/>
+  <text class="label" x="1095" y="1081">processSample(sample)</text>
+
+  <line class="message" x1="995" y1="1120" x2="995" y2="1120"/>
+  <text class="small" x="1015" y="1114">sleep(readIntervalMs)</text>
+
+  <rect class="shutdown" x="45" y="1160" width="1285" height="110"/>
+  <text class="section-shutdown" x="63" y="1185">shutdown path</text>
+
+  <line class="message" x1="100" y1="1210" x2="430" y2="1210"/>
+  <text class="label" x="190" y="1201">SIGTERM / SIGINT</text>
+
+  <line class="message" x1="430" y1="1240" x2="625" y2="1240"/>
+  <text class="label" x="500" y="1231">stop()</text>
+
+  <line class="message" x1="625" y1="1275" x2="815" y2="1275"/>
+  <text class="label" x="660" y="1266">requestStop()</text>
+
+  <line class="message" x1="815" y1="1275" x2="995" y2="1275"/>
+  <text class="label" x="855" y="1266">stop requested</text>
+
+  <line class="return" x1="995" y1="1300" x2="815" y2="1300"/>
+  <text class="small" x="850" y="1292">exit loop, joinAll(), deinitialize(), close()</text>
+</svg>

@@ -1,0 +1,16 @@
+build/
+Testing/
+
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+.cache/
+.idea/
+.vscode/
+
+*.swp
+*.swo

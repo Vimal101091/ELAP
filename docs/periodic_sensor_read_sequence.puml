@@ -1,0 +1,72 @@
+@startuml
+title Periodic Sensor Read Service Flow
+
+actor "OS / systemd / user" as Launcher
+participant "main()" as Main
+participant "ServiceApplication" as App
+participant "SensorReadService\n(IService)" as Service
+participant "ThreadManager" as Threads
+participant "sensor_reader\nworker thread" as Worker
+participant "SensorDevice" as Sensor
+participant "SampleProcessor" as Processor
+
+Launcher -> Main: start process
+Main -> Service: construct service
+Main -> App: run(service, argc, argv)
+
+App -> App: install signal handlers
+App -> App: set state = Initializing
+App -> Service: initialize()
+activate Service
+Service -> Service: load configuration
+Service -> Sensor: open()
+Sensor --> Service: opened
+Service -> Service: validate read interval
+Service --> App: true
+deactivate Service
+
+App -> App: set state = Starting
+App -> Service: start()
+activate Service
+Service -> Threads: startThread("sensor_reader", worker)
+Threads -> Worker: create thread
+Worker -> Service: runSensorReadLoop(stopToken)
+activate Worker
+Service --> App: true
+deactivate Service
+
+App -> App: set state = Running
+
+loop every readIntervalMs while stop not requested
+    Worker -> Sensor: read()
+    Sensor --> Worker: sensor sample
+    Worker -> Processor: processSample(sample)
+    Worker -> Worker: sleep(readIntervalMs)
+end
+
+Launcher -> App: SIGTERM / SIGINT
+App -> App: wake run loop
+App -> App: set state = Stopping
+App -> Service: stop()
+activate Service
+Service -> Threads: requestStop()
+Threads -> Worker: stop requested
+Worker --> Threads: exit runSensorReadLoop()
+deactivate Worker
+Service -> Threads: joinAll()
+Threads --> Service: worker joined
+Service --> App: stopped
+deactivate Service
+
+App -> Service: deinitialize()
+activate Service
+Service -> Sensor: close()
+Sensor --> Service: closed
+Service --> App: cleanup complete
+deactivate Service
+
+App -> App: set state = Stopped
+App --> Main: exit code
+Main --> Launcher: process exits
+
+@enduml
