@@ -46,6 +46,12 @@ Sample executables:
 - `ipc_echo_client`
 - `sample_ipc_server`
 - `sample_ipc_client`
+- `ipc_mq_receiver`
+- `ipc_mq_sender`
+- `ipc_shm_writer`
+- `ipc_shm_reader`
+- `ipc_event_receiver`
+- `ipc_event_publisher`
 
 The echo sample proves the IPC wrapper works across separate Linux
 processes. The server listens on a Unix domain socket, accepts one
@@ -57,6 +63,9 @@ the ELAP service framework. `sample_ipc_server` runs as a long-lived
 service, starts an IPC listener thread, handles framed requests, and
 shuts down cleanly on `SIGTERM` or `SIGINT`. `sample_ipc_client` sends a
 single request and prints the framed reply.
+
+The message queue, shared memory, and event bus sample pairs prove those
+IPC mechanisms across separate Linux processes.
 
 ## Message Framing
 
@@ -97,6 +106,9 @@ Integration coverage validates:
 - Starting the sample IPC server as an ELAP service
 - Calling it from the sample IPC client
 - Graceful shutdown of the IPC listener thread
+- Sending and receiving a POSIX message queue payload across processes
+- Writing and reading a shared memory payload across processes
+- Publishing and receiving an event bus message across processes
 
 Unix domain socket bind/listen and POSIX IPC objects may require running
 tests outside heavily restricted sandboxes.
@@ -105,9 +117,9 @@ tests outside heavily restricted sandboxes.
 
 Recommended next activities:
 
-1. Add process-level samples or integration tests for POSIX message
-   queues.
-2. Add process-level samples or integration tests for shared memory.
-3. Add process-level samples or integration tests for the event bus.
-4. Decide whether the event bus should support fan-out delivery, topic
+1. Decide whether the event bus should support fan-out delivery, topic
    filtering, or multiple backend transports.
+2. Add timeout/non-blocking APIs for message queues and event bus
+   receive paths.
+3. Add service-framework samples that combine command IPC with shared
+   memory data exchange.

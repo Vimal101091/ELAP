@@ -26,6 +26,8 @@ Initial Phase 2 IPC support:
 - Length-prefixed IPC message framing
 - Separate-process IPC echo server/client sample
 - Service-framework IPC server plus client sample
+- Process-level samples for POSIX message queues, shared memory, and the
+  event bus
 - Unit coverage for Unix sockets, message queues, shared memory, and
   event bus behavior
 
@@ -57,6 +59,12 @@ This builds:
 - `build/ipc_echo_client`
 - `build/sample_ipc_server`
 - `build/sample_ipc_client`
+- `build/ipc_mq_receiver`
+- `build/ipc_mq_sender`
+- `build/ipc_shm_writer`
+- `build/ipc_shm_reader`
+- `build/ipc_event_receiver`
+- `build/ipc_event_publisher`
 - `build/elap_unit_tests`
 
 ## Run Tests
@@ -74,7 +82,8 @@ You can also run the test executable directly:
 
 The CTest suite includes unit tests, sample service integration tests,
 a separate-process IPC echo round-trip test, and a service-framework IPC
-server/client round-trip test.
+server/client round-trip test. It also validates process-level POSIX
+message queue, shared memory, and event bus round trips.
 
 ## Run Sample Service
 
@@ -156,7 +165,7 @@ service graceful shutdown.
 ## Current Phase 2 Status
 
 Phase 2 has Unix domain socket IPC, POSIX message queue, shared memory,
-and event bus support. Unix sockets also have separate-process and
-service-framework integration coverage. The next recommended activity is
-to add process-level samples or integration tests for message queues,
-shared memory, and the event bus.
+and event bus support. Each IPC primitive has unit coverage and
+process-level integration coverage. The next recommended activity is to
+decide whether the event bus should support fan-out delivery, topic
+filtering, or multiple backend transports.

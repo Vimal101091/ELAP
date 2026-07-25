@@ -72,6 +72,48 @@ target_link_libraries(sample_ipc_client
     PRIVATE
         elap_platform)
 
+add_executable(ipc_mq_receiver
+    applications/ipc_mq_receiver/main.cpp)
+
+target_link_libraries(ipc_mq_receiver
+    PRIVATE
+        elap_platform)
+
+add_executable(ipc_mq_sender
+    applications/ipc_mq_sender/main.cpp)
+
+target_link_libraries(ipc_mq_sender
+    PRIVATE
+        elap_platform)
+
+add_executable(ipc_shm_writer
+    applications/ipc_shm_writer/main.cpp)
+
+target_link_libraries(ipc_shm_writer
+    PRIVATE
+        elap_platform)
+
+add_executable(ipc_shm_reader
+    applications/ipc_shm_reader/main.cpp)
+
+target_link_libraries(ipc_shm_reader
+    PRIVATE
+        elap_platform)
+
+add_executable(ipc_event_receiver
+    applications/ipc_event_receiver/main.cpp)
+
+target_link_libraries(ipc_event_receiver
+    PRIVATE
+        elap_platform)
+
+add_executable(ipc_event_publisher
+    applications/ipc_event_publisher/main.cpp)
+
+target_link_libraries(ipc_event_publisher
+    PRIVATE
+        elap_platform)
+
 if(ELAP_BUILD_TESTS)
     enable_testing()
 
@@ -112,4 +154,25 @@ if(ELAP_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/sample_ipc_service_test.sh
             $<TARGET_FILE:sample_ipc_server>
             $<TARGET_FILE:sample_ipc_client>)
+
+    add_test(
+        NAME ipc_message_queue_process_round_trip
+        COMMAND bash
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/ipc_message_queue_process_test.sh
+            $<TARGET_FILE:ipc_mq_receiver>
+            $<TARGET_FILE:ipc_mq_sender>)
+
+    add_test(
+        NAME ipc_shared_memory_process_round_trip
+        COMMAND bash
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/ipc_shared_memory_process_test.sh
+            $<TARGET_FILE:ipc_shm_writer>
+            $<TARGET_FILE:ipc_shm_reader>)
+
+    add_test(
+        NAME ipc_event_bus_process_round_trip
+        COMMAND bash
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/ipc_event_bus_process_test.sh
+            $<TARGET_FILE:ipc_event_receiver>
+            $<TARGET_FILE:ipc_event_publisher>)
 endif()
