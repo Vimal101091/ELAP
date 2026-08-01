@@ -14,7 +14,8 @@ public:
     bool openAll(std::string* errorMessage = nullptr);
     void closeAll();
 
-    IDevice* find(const std::string& name) const;
+    IDevice* find(const std::string& name);
+    const IDevice* find(const std::string& name) const;
     std::size_t count() const;
 
 private:

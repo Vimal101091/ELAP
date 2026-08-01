@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <chrono>
 #include <string>
+#include <sys/types.h>
 
 namespace elap::ipc {
 
@@ -52,6 +53,9 @@ public:
 private:
     int fd_ {-1};
     std::string path_;
+    dev_t pathDevice_ {};
+    ino_t pathInode_ {};
+    bool ownsPath_ {false};
 };
 
 class UnixSocketClient {

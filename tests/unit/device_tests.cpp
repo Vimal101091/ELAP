@@ -8,6 +8,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <unistd.h>
 
 namespace {
@@ -16,6 +17,53 @@ std::string testPath(const char* name)
 {
     return "/tmp/elap_" + std::string(name) + "_" + std::to_string(::getpid());
 }
+
+class TestDevice final : public elap::device::IDevice {
+public:
+    TestDevice(std::string name, bool openResult)
+        : name_(std::move(name))
+        , openResult_(openResult)
+    {
+    }
+
+    const char* name() const override
+    {
+        return name_.c_str();
+    }
+
+    bool open(std::string* errorMessage = nullptr) override
+    {
+        ++openCalls;
+        if (!openResult_) {
+            state_ = elap::device::DeviceState::Failed;
+            if (errorMessage != nullptr) {
+                *errorMessage = "open failed";
+            }
+            return false;
+        }
+        state_ = elap::device::DeviceState::Open;
+        return true;
+    }
+
+    void close() override
+    {
+        ++closeCalls;
+        state_ = elap::device::DeviceState::Closed;
+    }
+
+    elap::device::DeviceState state() const override
+    {
+        return state_;
+    }
+
+    int openCalls {0};
+    int closeCalls {0};
+
+private:
+    std::string name_;
+    bool openResult_;
+    elap::device::DeviceState state_ {elap::device::DeviceState::Closed};
+};
 
 void runFileDeviceRoundTripTest()
 {
@@ -67,6 +115,21 @@ void runDeviceManagerTest()
     manager.closeAll();
     assert(manager.find("dev0")->state() == elap::device::DeviceState::Closed);
     std::filesystem::remove(path);
+
+    elap::device::DeviceManager rollbackManager;
+    auto first = std::make_unique<TestDevice>("first", true);
+    auto second = std::make_unique<TestDevice>("second", false);
+    auto* firstDevice = first.get();
+    auto* secondDevice = second.get();
+
+    assert(rollbackManager.add(std::move(first), &error));
+    assert(rollbackManager.add(std::move(second), &error));
+    assert(!rollbackManager.openAll(&error));
+    assert(firstDevice->openCalls == 1);
+    assert(firstDevice->closeCalls == 1);
+    assert(firstDevice->state() == elap::device::DeviceState::Closed);
+    assert(secondDevice->openCalls == 1);
+    assert(secondDevice->closeCalls == 0);
 }
 
 void runGpioPinSysfsTest()
@@ -76,7 +139,7 @@ void runGpioPinSysfsTest()
     std::filesystem::create_directories(pinPath);
     {
         std::ofstream(root + "/export");
-        std::ofstream(root + "/unexport");
+        std::ofstream(root + "/unexport") << "sentinel";
         std::ofstream(pinPath + "/direction");
         std::ofstream(pinPath + "/value") << "0";
     }
@@ -92,6 +155,10 @@ void runGpioPinSysfsTest()
     assert(high);
 
     pin.close();
+    std::ifstream unexport(root + "/unexport");
+    std::string unexportContents;
+    unexport >> unexportContents;
+    assert(unexportContents == "sentinel");
     std::filesystem::remove_all(root);
 }
 

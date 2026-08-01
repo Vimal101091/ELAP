@@ -6,6 +6,7 @@
 #include <limits>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
@@ -83,6 +84,87 @@ bool fillAddress(const std::string& path, sockaddr_un& address, std::string* err
     address.sun_family = AF_UNIX;
     std::strncpy(address.sun_path, path.c_str(), sizeof(address.sun_path) - 1);
     return true;
+}
+
+bool socketHasActiveListener(const sockaddr_un& address)
+{
+    const int probeFd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    if (probeFd < 0) {
+        return true;
+    }
+
+    const bool connected = (::connect(probeFd,
+                                      reinterpret_cast<const sockaddr*>(&address),
+                                      sizeof(address)) == 0);
+    ::close(probeFd);
+    return connected;
+}
+
+bool removeStaleSocketPath(const std::string& path,
+                           const sockaddr_un& address,
+                           std::string* errorMessage)
+{
+    struct stat pathStatus {};
+    if (::lstat(path.c_str(), &pathStatus) != 0) {
+        if (errno == ENOENT) {
+            return true;
+        }
+        setError(errorMessage, systemError("lstat"));
+        return false;
+    }
+
+    if (!S_ISSOCK(pathStatus.st_mode)) {
+        setError(errorMessage, "bind failed: path exists and is not a unix socket");
+        return false;
+    }
+
+    if (socketHasActiveListener(address)) {
+        setError(errorMessage, "bind failed: unix socket path already has an active listener");
+        return false;
+    }
+
+    if (::unlink(path.c_str()) != 0 && errno != ENOENT) {
+        setError(errorMessage, systemError("unlink"));
+        return false;
+    }
+    return true;
+}
+
+bool loadSocketPathIdentity(const std::string& path,
+                            dev_t& device,
+                            ino_t& inode,
+                            std::string* errorMessage)
+{
+    struct stat pathStatus {};
+    if (::lstat(path.c_str(), &pathStatus) != 0) {
+        setError(errorMessage, systemError("lstat"));
+        return false;
+    }
+    if (!S_ISSOCK(pathStatus.st_mode)) {
+        setError(errorMessage, "bind failed: bound path is not a unix socket");
+        return false;
+    }
+
+    device = pathStatus.st_dev;
+    inode = pathStatus.st_ino;
+    return true;
+}
+
+void unlinkOwnedSocketPath(const std::string& path, dev_t device, ino_t inode)
+{
+    if (path.empty()) {
+        return;
+    }
+
+    struct stat pathStatus {};
+    if (::lstat(path.c_str(), &pathStatus) != 0) {
+        return;
+    }
+    if (S_ISSOCK(pathStatus.st_mode)
+        && pathStatus.st_dev == device
+        && pathStatus.st_ino == inode) {
+        ::unlink(path.c_str());
+    }
 }
 
 } // namespace
@@ -197,22 +279,37 @@ bool UnixSocketServer::listen(const std::string& path,
         return false;
     }
 
-    ::unlink(path.c_str());
+    if (!removeStaleSocketPath(path, address, errorMessage)) {
+        ::close(socketFd);
+        return false;
+    }
+
     if (::bind(socketFd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0) {
         setError(errorMessage, systemError("bind"));
         ::close(socketFd);
         return false;
     }
 
-    if (::listen(socketFd, backlog) < 0) {
-        setError(errorMessage, systemError("listen"));
+    dev_t pathDevice {};
+    ino_t pathInode {};
+    if (!loadSocketPathIdentity(path, pathDevice, pathInode, errorMessage)) {
         ::close(socketFd);
         ::unlink(path.c_str());
         return false;
     }
 
+    if (::listen(socketFd, backlog) < 0) {
+        setError(errorMessage, systemError("listen"));
+        ::close(socketFd);
+        unlinkOwnedSocketPath(path, pathDevice, pathInode);
+        return false;
+    }
+
     fd_ = socketFd;
     path_ = path;
+    pathDevice_ = pathDevice;
+    pathInode_ = pathInode;
+    ownsPath_ = true;
     return true;
 }
 
@@ -283,10 +380,13 @@ void UnixSocketServer::close()
         ::close(fd_);
         fd_ = -1;
     }
-    if (!path_.empty()) {
-        ::unlink(path_.c_str());
-        path_.clear();
+    if (ownsPath_) {
+        unlinkOwnedSocketPath(path_, pathDevice_, pathInode_);
     }
+    path_.clear();
+    pathDevice_ = {};
+    pathInode_ = {};
+    ownsPath_ = false;
 }
 
 UnixSocketConnection UnixSocketClient::connect(const std::string& path,

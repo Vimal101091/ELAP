@@ -1,8 +1,10 @@
 #include "elap/device/GpioPin.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <thread>
 #include <utility>
 
 namespace elap::device {
@@ -18,6 +20,19 @@ void setError(std::string* errorMessage, const std::string& message)
 const char* toSysfsDirection(GpioDirection direction)
 {
     return direction == GpioDirection::Out ? "out" : "in";
+}
+
+bool waitForPath(const std::string& path, std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (std::filesystem::exists(path)) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    } while (std::chrono::steady_clock::now() < deadline);
+
+    return std::filesystem::exists(path);
 }
 
 } // namespace
@@ -54,9 +69,21 @@ bool GpioPin::open(std::string* errorMessage)
             state_ = DeviceState::Failed;
             return false;
         }
+        exportedByThisInstance_ = true;
+        if (!waitForPath(path, std::chrono::milliseconds(250))) {
+            writeControlFile("unexport", std::to_string(pin_), nullptr);
+            exportedByThisInstance_ = false;
+            state_ = DeviceState::Failed;
+            setError(errorMessage, "gpio export failed: pin path did not appear");
+            return false;
+        }
     }
 
     if (!writePinFile("direction", toSysfsDirection(direction_), errorMessage)) {
+        if (exportedByThisInstance_) {
+            writeControlFile("unexport", std::to_string(pin_), nullptr);
+            exportedByThisInstance_ = false;
+        }
         state_ = DeviceState::Failed;
         return false;
     }
@@ -67,12 +94,11 @@ bool GpioPin::open(std::string* errorMessage)
 
 void GpioPin::close()
 {
-    if (state_ == DeviceState::Open) {
+    if (exportedByThisInstance_) {
         writeControlFile("unexport", std::to_string(pin_), nullptr);
+        exportedByThisInstance_ = false;
     }
-    if (state_ != DeviceState::Failed) {
-        state_ = DeviceState::Closed;
-    }
+    state_ = DeviceState::Closed;
 }
 
 DeviceState GpioPin::state() const

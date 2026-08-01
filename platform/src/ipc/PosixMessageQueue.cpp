@@ -95,8 +95,6 @@ bool PosixMessageQueue::create(const std::string& name,
         return false;
     }
 
-    ::mq_unlink(name.c_str());
-
     mq_attr attributes {};
     attributes.mq_maxmsg = maxMessages;
     attributes.mq_msgsize = maxMessageSize;

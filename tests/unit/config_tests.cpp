@@ -36,6 +36,10 @@ void runConfigTests()
     }
     assert(!invalid.loadFromFile(path, &error));
     assert(!error.empty());
+
+    assert(!configuration.loadFromFile(path, &error));
+    assert(configuration.has("service.name"));
+    assert(configuration.getString("service.name", "") == "sample_service");
 }
 
 } // namespace

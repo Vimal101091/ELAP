@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <limits>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -39,6 +40,27 @@ bool validSharedMemoryName(const std::string& name, std::string* errorMessage)
 bool inRange(std::size_t offset, std::size_t count, std::size_t size)
 {
     return offset <= size && count <= size - offset;
+}
+
+bool canRepresentAsOffT(std::size_t size)
+{
+    return size <= static_cast<std::size_t>(std::numeric_limits<off_t>::max());
+}
+
+bool loadSharedMemorySize(int fd, std::size_t& size, std::string* errorMessage)
+{
+    struct stat status {};
+    if (::fstat(fd, &status) != 0) {
+        setError(errorMessage, systemError("fstat"));
+        return false;
+    }
+    if (status.st_size <= 0) {
+        setError(errorMessage, "shared memory open failed: backing object has invalid size");
+        return false;
+    }
+
+    size = static_cast<std::size_t>(status.st_size);
+    return true;
 }
 
 } // namespace
@@ -91,8 +113,11 @@ bool SharedMemoryRegion::create(const std::string& name,
         setError(errorMessage, "shared memory size must be positive");
         return false;
     }
+    if (!canRepresentAsOffT(size)) {
+        setError(errorMessage, "shared memory size is too large");
+        return false;
+    }
 
-    ::shm_unlink(name.c_str());
     const int fd = ::shm_open(name.c_str(), O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
     if (fd < 0) {
         setError(errorMessage, systemError("shm_open"));
@@ -138,6 +163,17 @@ bool SharedMemoryRegion::open(const std::string& name,
     const int fd = ::shm_open(name.c_str(), O_RDWR, S_IRUSR | S_IWUSR);
     if (fd < 0) {
         setError(errorMessage, systemError("shm_open"));
+        return false;
+    }
+
+    std::size_t backingSize = 0;
+    if (!loadSharedMemorySize(fd, backingSize, errorMessage)) {
+        ::close(fd);
+        return false;
+    }
+    if (size > backingSize) {
+        setError(errorMessage, "shared memory open failed: requested size exceeds backing object size");
+        ::close(fd);
         return false;
     }
 

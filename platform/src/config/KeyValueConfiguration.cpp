@@ -37,7 +37,7 @@ bool KeyValueConfiguration::loadFromFile(const std::string& path, std::string* e
         return false;
     }
 
-    values_.clear();
+    std::unordered_map<std::string, std::string> parsedValues;
 
     std::string line;
     int lineNumber = 0;
@@ -60,7 +60,6 @@ bool KeyValueConfiguration::loadFromFile(const std::string& path, std::string* e
                 stream << "invalid configuration line " << lineNumber << ": expected key=value";
                 *errorMessage = stream.str();
             }
-            values_.clear();
             return false;
         }
 
@@ -72,13 +71,13 @@ bool KeyValueConfiguration::loadFromFile(const std::string& path, std::string* e
                 stream << "invalid configuration line " << lineNumber << ": key is empty";
                 *errorMessage = stream.str();
             }
-            values_.clear();
             return false;
         }
 
-        values_[std::move(key)] = std::move(value);
+        parsedValues[std::move(key)] = std::move(value);
     }
 
+    values_ = std::move(parsedValues);
     return true;
 }
 

@@ -6,6 +6,7 @@
 #include <cassert>
 #include <chrono>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -88,6 +89,22 @@ void runUnixSocketValidationTest()
 
     serverThread.join();
     server.close();
+
+    const auto regularFilePath = testSocketPath("ipc_regular_file");
+    {
+        std::ofstream file(regularFilePath);
+        file << "must-not-delete";
+    }
+
+    elap::ipc::UnixSocketServer invalidServer;
+    assert(!invalidServer.listen(regularFilePath, 1, &error));
+    assert(!error.empty());
+
+    std::ifstream file(regularFilePath);
+    std::string contents;
+    file >> contents;
+    assert(contents == "must-not-delete");
+    ::unlink(regularFilePath.c_str());
 }
 
 void runMessageQueueRoundTripTest()
@@ -116,6 +133,10 @@ void runMessageQueueRoundTripTest()
     assert(!producer.sendMessage(std::string(256, 'x'), 0, &error));
     assert(!error.empty());
 
+    elap::ipc::PosixMessageQueue duplicate;
+    assert(!duplicate.create(name, 4, 128, &error));
+    assert(!error.empty());
+
     consumer.close();
     producer.close();
 }
@@ -134,6 +155,14 @@ void runSharedMemoryRoundTripTest()
     elap::ipc::SharedMemoryRegion reader;
     assert(reader.open(name, 256, &error));
     assert(reader.isMapped());
+
+    elap::ipc::SharedMemoryRegion duplicate;
+    assert(!duplicate.create(name, 256, &error));
+    assert(!error.empty());
+
+    elap::ipc::SharedMemoryRegion oversizedReader;
+    assert(!oversizedReader.open(name, 512, &error));
+    assert(!error.empty());
 
     const std::string payload = "shared-memory-payload";
     assert(writer.write(16, payload.data(), payload.size(), &error));

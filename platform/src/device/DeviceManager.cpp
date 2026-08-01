@@ -30,10 +30,19 @@ bool DeviceManager::add(std::unique_ptr<IDevice> device, std::string* errorMessa
 
 bool DeviceManager::openAll(std::string* errorMessage)
 {
+    std::vector<IDevice*> openedDevices;
+    openedDevices.reserve(devices_.size());
+
     for (auto& device : devices_) {
         if (!device->open(errorMessage)) {
+            for (auto iterator = openedDevices.rbegin();
+                 iterator != openedDevices.rend();
+                 ++iterator) {
+                (*iterator)->close();
+            }
             return false;
         }
+        openedDevices.push_back(device.get());
     }
     return true;
 }
@@ -45,7 +54,17 @@ void DeviceManager::closeAll()
     }
 }
 
-IDevice* DeviceManager::find(const std::string& name) const
+IDevice* DeviceManager::find(const std::string& name)
+{
+    for (auto& device : devices_) {
+        if (device->name() == name) {
+            return device.get();
+        }
+    }
+    return nullptr;
+}
+
+const IDevice* DeviceManager::find(const std::string& name) const
 {
     for (const auto& device : devices_) {
         if (device->name() == name) {

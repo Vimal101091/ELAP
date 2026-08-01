@@ -42,6 +42,7 @@ private:
     GpioDirection direction_;
     std::string gpioRoot_;
     DeviceState state_ {DeviceState::Closed};
+    bool exportedByThisInstance_ {false};
 };
 
 } // namespace elap::device
