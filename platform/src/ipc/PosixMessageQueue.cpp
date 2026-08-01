@@ -1,6 +1,8 @@
 #include "elap/ipc/PosixMessageQueue.hpp"
 
 #include <cerrno>
+#include <chrono>
+#include <ctime>
 #include <cstring>
 #include <fcntl.h>
 #include <mqueue.h>
@@ -44,6 +46,33 @@ bool loadAttributes(mqd_t descriptor, std::size_t& maxMessageSize, std::string* 
         return false;
     }
     maxMessageSize = static_cast<std::size_t>(attributes.mq_msgsize);
+    return true;
+}
+
+bool loadDeadline(std::chrono::milliseconds timeout,
+                  timespec& deadline,
+                  std::string* errorMessage)
+{
+    if (timeout.count() < 0) {
+        setError(errorMessage, "message queue timeout must not be negative");
+        return false;
+    }
+    if (::clock_gettime(CLOCK_REALTIME, &deadline) != 0) {
+        setError(errorMessage, systemError("clock_gettime"));
+        return false;
+    }
+
+    constexpr long nanosecondsPerSecond = 1000L * 1000L * 1000L;
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(timeout);
+    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(
+        timeout - seconds);
+
+    deadline.tv_sec += static_cast<time_t>(seconds.count());
+    deadline.tv_nsec += static_cast<long>(milliseconds.count()) * 1000L * 1000L;
+    if (deadline.tv_nsec >= nanosecondsPerSecond) {
+        deadline.tv_sec += deadline.tv_nsec / nanosecondsPerSecond;
+        deadline.tv_nsec %= nanosecondsPerSecond;
+    }
     return true;
 }
 
@@ -170,6 +199,36 @@ bool PosixMessageQueue::sendMessage(const std::string& message,
     return true;
 }
 
+bool PosixMessageQueue::sendMessage(const std::string& message,
+                                    unsigned int priority,
+                                    std::chrono::milliseconds timeout,
+                                    std::string* errorMessage)
+{
+    if (!isOpen()) {
+        setError(errorMessage, "mq_timedsend failed: queue is not open");
+        return false;
+    }
+    if (message.size() > maxMessageSize_) {
+        setError(errorMessage, "mq_timedsend failed: message exceeds maximum size");
+        return false;
+    }
+
+    timespec deadline {};
+    if (!loadDeadline(timeout, deadline, errorMessage)) {
+        return false;
+    }
+
+    if (::mq_timedsend(static_cast<mqd_t>(descriptor_),
+                       message.data(),
+                       message.size(),
+                       priority,
+                       &deadline) != 0) {
+        setError(errorMessage, systemError("mq_timedsend"));
+        return false;
+    }
+    return true;
+}
+
 bool PosixMessageQueue::receiveMessage(std::string& message,
                                        unsigned int* priority,
                                        std::string* errorMessage)
@@ -188,6 +247,41 @@ bool PosixMessageQueue::receiveMessage(std::string& message,
                                     &receivedPriority);
     if (bytes < 0) {
         setError(errorMessage, systemError("mq_receive"));
+        return false;
+    }
+
+    message.assign(buffer.data(), static_cast<std::size_t>(bytes));
+    if (priority != nullptr) {
+        *priority = receivedPriority;
+    }
+    return true;
+}
+
+bool PosixMessageQueue::receiveMessage(std::string& message,
+                                       unsigned int* priority,
+                                       std::chrono::milliseconds timeout,
+                                       std::string* errorMessage)
+{
+    message.clear();
+    if (!isOpen()) {
+        setError(errorMessage, "mq_timedreceive failed: queue is not open");
+        return false;
+    }
+
+    timespec deadline {};
+    if (!loadDeadline(timeout, deadline, errorMessage)) {
+        return false;
+    }
+
+    std::vector<char> buffer(maxMessageSize_);
+    unsigned int receivedPriority = 0;
+    const auto bytes = ::mq_timedreceive(static_cast<mqd_t>(descriptor_),
+                                         buffer.data(),
+                                         buffer.size(),
+                                         &receivedPriority,
+                                         &deadline);
+    if (bytes < 0) {
+        setError(errorMessage, systemError("mq_timedreceive"));
         return false;
     }
 

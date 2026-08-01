@@ -2,6 +2,7 @@
 
 #include <arpa/inet.h>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <poll.h>
@@ -23,6 +24,51 @@ void setError(std::string* errorMessage, const std::string& message)
 std::string systemError(const std::string& operation)
 {
     return operation + " failed: " + std::strerror(errno);
+}
+
+int pollTimeout(std::chrono::milliseconds timeout)
+{
+    if (timeout.count() > std::numeric_limits<int>::max()) {
+        return std::numeric_limits<int>::max();
+    }
+    if (timeout.count() < 0) {
+        return -1;
+    }
+    return static_cast<int>(timeout.count());
+}
+
+bool waitForDescriptor(int fd,
+                       short events,
+                       std::chrono::steady_clock::time_point deadline,
+                       const std::string& operation,
+                       std::string* errorMessage)
+{
+    while (true) {
+        const auto now = std::chrono::steady_clock::now();
+        const auto remaining = now >= deadline
+            ? std::chrono::milliseconds(0)
+            : std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+        pollfd descriptor {};
+        descriptor.fd = fd;
+        descriptor.events = events;
+
+        const auto result = ::poll(&descriptor, 1, pollTimeout(remaining));
+        if (result > 0) {
+            if ((descriptor.revents & events) != 0) {
+                return true;
+            }
+            if ((descriptor.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+                setError(errorMessage, operation + " failed: descriptor is not usable");
+                return false;
+            }
+        } else if (result == 0) {
+            setError(errorMessage, operation + " timed out");
+            return false;
+        } else if (errno != EINTR) {
+            setError(errorMessage, systemError("poll"));
+            return false;
+        }
+    }
 }
 
 bool writeAll(int fd, const void* data, std::size_t size, std::string* errorMessage)
@@ -47,6 +93,36 @@ bool writeAll(int fd, const void* data, std::size_t size, std::string* errorMess
     return true;
 }
 
+bool writeAll(int fd,
+              const void* data,
+              std::size_t size,
+              std::chrono::steady_clock::time_point deadline,
+              std::string* errorMessage)
+{
+    const auto* bytes = static_cast<const char*>(data);
+    std::size_t written = 0;
+    while (written < size) {
+        if (!waitForDescriptor(fd, POLLOUT, deadline, "send", errorMessage)) {
+            return false;
+        }
+
+        const auto result = ::send(fd, bytes + written, size - written, MSG_NOSIGNAL);
+        if (result < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+            setError(errorMessage, systemError("send"));
+            return false;
+        }
+        if (result == 0) {
+            setError(errorMessage, "send failed: connection closed");
+            return false;
+        }
+        written += static_cast<std::size_t>(result);
+    }
+    return true;
+}
+
 bool readAll(int fd, void* data, std::size_t size, std::string* errorMessage)
 {
     auto* bytes = static_cast<char*>(data);
@@ -55,6 +131,36 @@ bool readAll(int fd, void* data, std::size_t size, std::string* errorMessage)
         const auto result = ::recv(fd, bytes + read, size - read, 0);
         if (result < 0) {
             if (errno == EINTR) {
+                continue;
+            }
+            setError(errorMessage, systemError("receive"));
+            return false;
+        }
+        if (result == 0) {
+            setError(errorMessage, "receive failed: connection closed");
+            return false;
+        }
+        read += static_cast<std::size_t>(result);
+    }
+    return true;
+}
+
+bool readAll(int fd,
+             void* data,
+             std::size_t size,
+             std::chrono::steady_clock::time_point deadline,
+             std::string* errorMessage)
+{
+    auto* bytes = static_cast<char*>(data);
+    std::size_t read = 0;
+    while (read < size) {
+        if (!waitForDescriptor(fd, POLLIN, deadline, "receive", errorMessage)) {
+            return false;
+        }
+
+        const auto result = ::recv(fd, bytes + read, size - read, 0);
+        if (result < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
             }
             setError(errorMessage, systemError("receive"));
@@ -221,6 +327,29 @@ bool UnixSocketConnection::sendMessage(const std::string& message, std::string* 
         && writeAll(fd_, message.data(), message.size(), errorMessage);
 }
 
+bool UnixSocketConnection::sendMessage(const std::string& message,
+                                       std::chrono::milliseconds timeout,
+                                       std::string* errorMessage)
+{
+    if (!isOpen()) {
+        setError(errorMessage, "send failed: connection is not open");
+        return false;
+    }
+    if (timeout.count() < 0) {
+        setError(errorMessage, "send failed: timeout must not be negative");
+        return false;
+    }
+    if (message.size() > std::numeric_limits<std::uint32_t>::max()) {
+        setError(errorMessage, "send failed: message is too large");
+        return false;
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    const auto size = htonl(static_cast<std::uint32_t>(message.size()));
+    return writeAll(fd_, &size, sizeof(size), deadline, errorMessage)
+        && writeAll(fd_, message.data(), message.size(), deadline, errorMessage);
+}
+
 bool UnixSocketConnection::receiveMessage(std::string& message,
                                           std::size_t maxSize,
                                           std::string* errorMessage)
@@ -247,6 +376,40 @@ bool UnixSocketConnection::receiveMessage(std::string& message,
         return true;
     }
     return readAll(fd_, message.data(), size, errorMessage);
+}
+
+bool UnixSocketConnection::receiveMessage(std::string& message,
+                                          std::size_t maxSize,
+                                          std::chrono::milliseconds timeout,
+                                          std::string* errorMessage)
+{
+    message.clear();
+    if (!isOpen()) {
+        setError(errorMessage, "receive failed: connection is not open");
+        return false;
+    }
+    if (timeout.count() < 0) {
+        setError(errorMessage, "receive failed: timeout must not be negative");
+        return false;
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    std::uint32_t encodedSize = 0;
+    if (!readAll(fd_, &encodedSize, sizeof(encodedSize), deadline, errorMessage)) {
+        return false;
+    }
+
+    const auto size = static_cast<std::size_t>(ntohl(encodedSize));
+    if (size > maxSize) {
+        setError(errorMessage, "receive failed: message exceeds maximum size");
+        return false;
+    }
+
+    message.resize(size);
+    if (size == 0) {
+        return true;
+    }
+    return readAll(fd_, message.data(), size, deadline, errorMessage);
 }
 
 void UnixSocketConnection::close()

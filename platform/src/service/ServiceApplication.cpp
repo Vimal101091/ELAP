@@ -5,6 +5,7 @@
 #include "elap/signals/SignalHandler.hpp"
 
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <string>
 
@@ -43,6 +44,25 @@ void configureLogger(logging::ConsoleLogger& logger,
     }
 }
 
+void logException(logging::ConsoleLogger& logger,
+                  const char* serviceName,
+                  const char* operation,
+                  const std::exception& exception)
+{
+    logger.log(logging::LogLevel::Error,
+               serviceName,
+               (std::string(operation) + " threw exception: " + exception.what()).c_str());
+}
+
+void logUnknownException(logging::ConsoleLogger& logger,
+                         const char* serviceName,
+                         const char* operation)
+{
+    logger.log(logging::LogLevel::Error,
+               serviceName,
+               (std::string(operation) + " threw unknown exception").c_str());
+}
+
 } // namespace
 
 int ServiceApplication::run(IService& service, int argc, char** argv)
@@ -75,8 +95,28 @@ int ServiceApplication::run(IService& service, int argc, char** argv)
 
     setState(ServiceState::Initializing);
     logger_.log(logging::LogLevel::Info, service.name(), "initializing service");
-    if (!service.initialize()) {
+    bool initialized = false;
+    try {
+        initialized = service.initialize();
+    } catch (const std::exception& exception) {
+        logException(logger_, service.name(), "service initialization", exception);
+        setState(ServiceState::Failed);
+        return 4;
+    } catch (...) {
+        logUnknownException(logger_, service.name(), "service initialization");
+        setState(ServiceState::Failed);
+        return 4;
+    }
+
+    if (!initialized) {
         logger_.log(logging::LogLevel::Error, service.name(), "service initialization failed");
+        try {
+            service.deinitialize();
+        } catch (const std::exception& exception) {
+            logException(logger_, service.name(), "service deinitialization", exception);
+        } catch (...) {
+            logUnknownException(logger_, service.name(), "service deinitialization");
+        }
         setState(ServiceState::Failed);
         return 4;
     }
@@ -84,9 +124,42 @@ int ServiceApplication::run(IService& service, int argc, char** argv)
     setState(ServiceState::Initialized);
     setState(ServiceState::Starting);
     logger_.log(logging::LogLevel::Info, service.name(), "starting service");
-    if (!service.start()) {
+    bool started = false;
+    try {
+        started = service.start();
+    } catch (const std::exception& exception) {
+        logException(logger_, service.name(), "service start", exception);
+        try {
+            service.deinitialize();
+        } catch (const std::exception& deinitializeException) {
+            logException(logger_, service.name(), "service deinitialization", deinitializeException);
+        } catch (...) {
+            logUnknownException(logger_, service.name(), "service deinitialization");
+        }
+        setState(ServiceState::Failed);
+        return 5;
+    } catch (...) {
+        logUnknownException(logger_, service.name(), "service start");
+        try {
+            service.deinitialize();
+        } catch (const std::exception& exception) {
+            logException(logger_, service.name(), "service deinitialization", exception);
+        } catch (...) {
+            logUnknownException(logger_, service.name(), "service deinitialization");
+        }
+        setState(ServiceState::Failed);
+        return 5;
+    }
+
+    if (!started) {
         logger_.log(logging::LogLevel::Error, service.name(), "service start failed");
-        service.deinitialize();
+        try {
+            service.deinitialize();
+        } catch (const std::exception& exception) {
+            logException(logger_, service.name(), "service deinitialization", exception);
+        } catch (...) {
+            logUnknownException(logger_, service.name(), "service deinitialization");
+        }
         setState(ServiceState::Failed);
         return 5;
     }
@@ -105,8 +178,43 @@ int ServiceApplication::run(IService& service, int argc, char** argv)
 
     setState(ServiceState::Stopping);
     logger_.log(logging::LogLevel::Info, service.name(), "stopping service");
-    service.stop();
-    service.deinitialize();
+    try {
+        service.stop();
+    } catch (const std::exception& exception) {
+        logException(logger_, service.name(), "service stop", exception);
+        try {
+            service.deinitialize();
+        } catch (const std::exception& deinitializeException) {
+            logException(logger_, service.name(), "service deinitialization", deinitializeException);
+        } catch (...) {
+            logUnknownException(logger_, service.name(), "service deinitialization");
+        }
+        setState(ServiceState::Failed);
+        return 6;
+    } catch (...) {
+        logUnknownException(logger_, service.name(), "service stop");
+        try {
+            service.deinitialize();
+        } catch (const std::exception& exception) {
+            logException(logger_, service.name(), "service deinitialization", exception);
+        } catch (...) {
+            logUnknownException(logger_, service.name(), "service deinitialization");
+        }
+        setState(ServiceState::Failed);
+        return 6;
+    }
+
+    try {
+        service.deinitialize();
+    } catch (const std::exception& exception) {
+        logException(logger_, service.name(), "service deinitialization", exception);
+        setState(ServiceState::Failed);
+        return 7;
+    } catch (...) {
+        logUnknownException(logger_, service.name(), "service deinitialization");
+        setState(ServiceState::Failed);
+        return 7;
+    }
     setState(ServiceState::Stopped);
     logger_.log(logging::LogLevel::Info, service.name(), "service stopped");
     return 0;

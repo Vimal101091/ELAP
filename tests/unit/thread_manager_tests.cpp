@@ -29,6 +29,8 @@ void runThreadManagerTests()
 
 } // namespace
 
+void runServiceApplicationTests();
+
 struct ThreadManagerTestRunner {
     ThreadManagerTestRunner()
     {
@@ -38,5 +40,6 @@ struct ThreadManagerTestRunner {
 
 int main()
 {
+    runServiceApplicationTests();
     return 0;
 }

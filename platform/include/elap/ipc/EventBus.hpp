@@ -2,6 +2,7 @@
 
 #include "elap/ipc/PosixMessageQueue.hpp"
 
+#include <chrono>
 #include <string>
 
 namespace elap::ipc {
@@ -20,7 +21,13 @@ public:
     bool open(const std::string& name, std::string* errorMessage = nullptr);
 
     bool publish(const Event& event, std::string* errorMessage = nullptr);
+    bool publish(const Event& event,
+                 std::chrono::milliseconds timeout,
+                 std::string* errorMessage = nullptr);
     bool receive(Event& event, std::string* errorMessage = nullptr);
+    bool receive(Event& event,
+                 std::chrono::milliseconds timeout,
+                 std::string* errorMessage = nullptr);
 
     bool isOpen() const;
     void close();

@@ -1,6 +1,8 @@
 #include "elap/storage/Database.hpp"
 
+#include <chrono>
 #include <cstring>
+#include <limits>
 #include <sqlite3.h>
 #include <utility>
 
@@ -12,6 +14,114 @@ void setError(std::string* errorMessage, const std::string& message)
     if (errorMessage != nullptr) {
         *errorMessage = message;
     }
+}
+
+class Statement {
+public:
+    Statement() = default;
+    ~Statement()
+    {
+        if (stmt_ != nullptr) {
+            sqlite3_finalize(stmt_);
+        }
+    }
+
+    Statement(const Statement&) = delete;
+    Statement& operator=(const Statement&) = delete;
+
+    sqlite3_stmt** out()
+    {
+        return &stmt_;
+    }
+
+    sqlite3_stmt* get() const
+    {
+        return stmt_;
+    }
+
+private:
+    sqlite3_stmt* stmt_ {nullptr};
+};
+
+bool validArgumentArrays(int argc,
+                         const char* const* values,
+                         const int* sizes,
+                         const Database::BindType* types,
+                         std::string* errorMessage)
+{
+    if (argc < 0) {
+        setError(errorMessage, "argument count must not be negative");
+        return false;
+    }
+    if (argc > 0 && values == nullptr) {
+        setError(errorMessage, "argument values array is null");
+        return false;
+    }
+    if (sizes == nullptr || types == nullptr) {
+        return true;
+    }
+    for (int i = 0; i < argc; ++i) {
+        if (values[i] != nullptr && sizes[i] < 0) {
+            setError(errorMessage, "argument size must not be negative");
+            return false;
+        }
+    }
+    return true;
+}
+
+bool bindTextArgs(sqlite3* db,
+                  sqlite3_stmt* stmt,
+                  int argc,
+                  const char* const* values,
+                  std::string* errorMessage)
+{
+    if (!validArgumentArrays(argc, values, nullptr, nullptr, errorMessage)) {
+        return false;
+    }
+
+    for (int i = 0; i < argc; ++i) {
+        const int rc = values[i] == nullptr
+            ? sqlite3_bind_null(stmt, i + 1)
+            : sqlite3_bind_text(stmt, i + 1, values[i], -1, SQLITE_TRANSIENT);
+        if (rc != SQLITE_OK) {
+            setError(errorMessage, "bind failed: " + std::string(sqlite3_errmsg(db)));
+            return false;
+        }
+    }
+    return true;
+}
+
+bool bindTypedArgs(sqlite3* db,
+                   sqlite3_stmt* stmt,
+                   int argc,
+                   const char* const* values,
+                   const int* sizes,
+                   const Database::BindType* types,
+                   std::string* errorMessage)
+{
+    if (!validArgumentArrays(argc, values, sizes, types, errorMessage)) {
+        return false;
+    }
+    if (argc > 0 && (sizes == nullptr || types == nullptr)) {
+        setError(errorMessage, "typed bind metadata is null");
+        return false;
+    }
+
+    for (int i = 0; i < argc; ++i) {
+        int rc = SQLITE_OK;
+        if (values[i] == nullptr) {
+            rc = sqlite3_bind_null(stmt, i + 1);
+        } else if (types[i] == Database::BindType::Blob) {
+            rc = sqlite3_bind_blob(stmt, i + 1, values[i], sizes[i], SQLITE_TRANSIENT);
+        } else {
+            rc = sqlite3_bind_text(stmt, i + 1, values[i], sizes[i], SQLITE_TRANSIENT);
+        }
+        if (rc != SQLITE_OK) {
+            setError(errorMessage, "bind failed: " + std::string(sqlite3_errmsg(db)));
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace
@@ -55,6 +165,7 @@ bool Database::open(const std::string& path, std::string* errorMessage)
     }
     db_ = db;
     path_ = path;
+    sqlite3_busy_timeout(db_, static_cast<int>(std::chrono::milliseconds(1000).count()));
     return true;
 }
 
@@ -107,22 +218,21 @@ bool Database::query(const std::string& sql, RowCallback callback,
         return false;
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), static_cast<int>(sql.size()),
-                                &stmt, nullptr);
+    Statement stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, stmt.out(), nullptr);
     if (rc != SQLITE_OK) {
         setError(errorMessage, "prepare query failed: " + std::string(sqlite3_errmsg(db_)));
         return false;
     }
 
     bool ok = true;
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        const int argc = sqlite3_column_count(stmt);
+    while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+        const int argc = sqlite3_column_count(stmt.get());
         std::vector<const char*> colValues(argc);
         std::vector<const char*> colNames(argc);
         for (int i = 0; i < argc; ++i) {
-            colValues[i] = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
-            colNames[i] = sqlite3_column_name(stmt, i);
+            colValues[i] = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), i));
+            colNames[i] = sqlite3_column_name(stmt.get(), i);
         }
         if (!callback(argc,
                       const_cast<char**>(colValues.data()),
@@ -137,7 +247,6 @@ bool Database::query(const std::string& sql, RowCallback callback,
         ok = false;
     }
 
-    sqlite3_finalize(stmt);
     return ok;
 }
 
@@ -151,30 +260,25 @@ bool Database::queryWithArgs(const std::string& sql,
         return false;
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), static_cast<int>(sql.size()),
-                                &stmt, nullptr);
+    Statement stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, stmt.out(), nullptr);
     if (rc != SQLITE_OK) {
         setError(errorMessage, "prepare query failed: " + std::string(sqlite3_errmsg(db_)));
         return false;
     }
 
-    for (int i = 0; i < argc; ++i) {
-        if (values[i] == nullptr) {
-            sqlite3_bind_null(stmt, i + 1);
-        } else {
-            sqlite3_bind_text(stmt, i + 1, values[i], -1, SQLITE_TRANSIENT);
-        }
+    if (!bindTextArgs(db_, stmt.get(), argc, values, errorMessage)) {
+        return false;
     }
 
     bool ok = true;
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        const int colCount = sqlite3_column_count(stmt);
+    while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+        const int colCount = sqlite3_column_count(stmt.get());
         std::vector<const char*> colValues(colCount);
         std::vector<const char*> colNames(colCount);
         for (int i = 0; i < colCount; ++i) {
-            colValues[i] = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
-            colNames[i] = sqlite3_column_name(stmt, i);
+            colValues[i] = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), i));
+            colNames[i] = sqlite3_column_name(stmt.get(), i);
         }
         if (!callback(colCount,
                       const_cast<char**>(colValues.data()),
@@ -189,7 +293,6 @@ bool Database::queryWithArgs(const std::string& sql,
         ok = false;
     }
 
-    sqlite3_finalize(stmt);
     return ok;
 }
 
@@ -201,22 +304,21 @@ bool Database::queryBlob(const std::string& sql, BlobRowCallback callback,
         return false;
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), static_cast<int>(sql.size()),
-                                &stmt, nullptr);
+    Statement stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, stmt.out(), nullptr);
     if (rc != SQLITE_OK) {
         setError(errorMessage, "prepare query failed: " + std::string(sqlite3_errmsg(db_)));
         return false;
     }
 
     bool ok = true;
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        const int colCount = sqlite3_column_count(stmt);
+    while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+        const int colCount = sqlite3_column_count(stmt.get());
         std::vector<Column> columns(colCount);
         for (int i = 0; i < colCount; ++i) {
-            columns[i].data = sqlite3_column_blob(stmt, i);
-            columns[i].size = sqlite3_column_bytes(stmt, i);
-            columns[i].name = sqlite3_column_name(stmt, i);
+            columns[i].data = sqlite3_column_blob(stmt.get(), i);
+            columns[i].size = sqlite3_column_bytes(stmt.get(), i);
+            columns[i].name = sqlite3_column_name(stmt.get(), i);
         }
         if (!callback(colCount, columns.data())) {
             ok = false;
@@ -229,7 +331,6 @@ bool Database::queryBlob(const std::string& sql, BlobRowCallback callback,
         ok = false;
     }
 
-    sqlite3_finalize(stmt);
     return ok;
 }
 
@@ -243,30 +344,25 @@ bool Database::queryBlobWithArgs(const std::string& sql,
         return false;
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), static_cast<int>(sql.size()),
-                                &stmt, nullptr);
+    Statement stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, stmt.out(), nullptr);
     if (rc != SQLITE_OK) {
         setError(errorMessage, "prepare query failed: " + std::string(sqlite3_errmsg(db_)));
         return false;
     }
 
-    for (int i = 0; i < argc; ++i) {
-        if (values[i] == nullptr) {
-            sqlite3_bind_null(stmt, i + 1);
-        } else {
-            sqlite3_bind_text(stmt, i + 1, values[i], -1, SQLITE_TRANSIENT);
-        }
+    if (!bindTextArgs(db_, stmt.get(), argc, values, errorMessage)) {
+        return false;
     }
 
     bool ok = true;
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        const int colCount = sqlite3_column_count(stmt);
+    while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+        const int colCount = sqlite3_column_count(stmt.get());
         std::vector<Column> columns(colCount);
         for (int i = 0; i < colCount; ++i) {
-            columns[i].data = sqlite3_column_blob(stmt, i);
-            columns[i].size = sqlite3_column_bytes(stmt, i);
-            columns[i].name = sqlite3_column_name(stmt, i);
+            columns[i].data = sqlite3_column_blob(stmt.get(), i);
+            columns[i].size = sqlite3_column_bytes(stmt.get(), i);
+            columns[i].name = sqlite3_column_name(stmt.get(), i);
         }
         if (!callback(colCount, columns.data())) {
             ok = false;
@@ -279,7 +375,6 @@ bool Database::queryBlobWithArgs(const std::string& sql,
         ok = false;
     }
 
-    sqlite3_finalize(stmt);
     return ok;
 }
 
@@ -292,30 +387,23 @@ bool Database::execWithArgs(const std::string& sql,
         return false;
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), static_cast<int>(sql.size()),
-                                &stmt, nullptr);
+    Statement stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, stmt.out(), nullptr);
     if (rc != SQLITE_OK) {
         setError(errorMessage, "prepare failed: " + std::string(sqlite3_errmsg(db_)));
         return false;
     }
 
-    for (int i = 0; i < argc; ++i) {
-        if (values[i] == nullptr) {
-            sqlite3_bind_null(stmt, i + 1);
-        } else {
-            sqlite3_bind_text(stmt, i + 1, values[i], -1, SQLITE_TRANSIENT);
-        }
-    }
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
-        setError(errorMessage, "exec failed: " + std::string(sqlite3_errmsg(db_)));
-        sqlite3_finalize(stmt);
+    if (!bindTextArgs(db_, stmt.get(), argc, values, errorMessage)) {
         return false;
     }
 
-    sqlite3_finalize(stmt);
+    rc = sqlite3_step(stmt.get());
+    if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
+        setError(errorMessage, "exec failed: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+
     return true;
 }
 
@@ -329,32 +417,23 @@ bool Database::execBind(const std::string& sql,
         return false;
     }
 
-    sqlite3_stmt* stmt = nullptr;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), static_cast<int>(sql.size()),
-                                &stmt, nullptr);
+    Statement stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, stmt.out(), nullptr);
     if (rc != SQLITE_OK) {
         setError(errorMessage, "prepare failed: " + std::string(sqlite3_errmsg(db_)));
         return false;
     }
 
-    for (int i = 0; i < argc; ++i) {
-        if (values[i] == nullptr) {
-            sqlite3_bind_null(stmt, i + 1);
-        } else if (types[i] == BindType::Blob) {
-            sqlite3_bind_blob(stmt, i + 1, values[i], sizes[i], SQLITE_TRANSIENT);
-        } else {
-            sqlite3_bind_text(stmt, i + 1, values[i], sizes[i], SQLITE_TRANSIENT);
-        }
-    }
-
-    rc = sqlite3_step(stmt);
-    if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
-        setError(errorMessage, "exec bind failed: " + std::string(sqlite3_errmsg(db_)));
-        sqlite3_finalize(stmt);
+    if (!bindTypedArgs(db_, stmt.get(), argc, values, sizes, types, errorMessage)) {
         return false;
     }
 
-    sqlite3_finalize(stmt);
+    rc = sqlite3_step(stmt.get());
+    if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
+        setError(errorMessage, "exec bind failed: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+
     return true;
 }
 

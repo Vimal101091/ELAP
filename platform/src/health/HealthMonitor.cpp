@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <sys/statvfs.h>
 #include <utility>
@@ -58,16 +59,19 @@ double DiskInfo::usedPercent() const
 
 void HealthMonitor::setProcRoot(std::string procRoot)
 {
+    const std::lock_guard lock(mutex_);
     procRoot_ = std::move(procRoot);
 }
 
 void HealthMonitor::setDiskPath(std::string diskPath)
 {
+    const std::lock_guard lock(mutex_);
     diskPath_ = std::move(diskPath);
 }
 
 void HealthMonitor::reportService(const std::string& name, service::ServiceState state)
 {
+    const std::lock_guard lock(mutex_);
     const auto existing = std::find_if(services_.begin(), services_.end(),
                                        [&name](const ServiceHealth& health) {
                                            return health.name == name;
@@ -82,16 +86,24 @@ void HealthMonitor::reportService(const std::string& name, service::ServiceState
 
 void HealthMonitor::clearServices()
 {
+    const std::lock_guard lock(mutex_);
     services_.clear();
 }
 
 HealthSnapshot HealthMonitor::collect(std::string* errorMessage) const
 {
     HealthSnapshot snapshot;
-    snapshot.services = services_;
+    std::string procRoot;
+    std::string diskPath;
+    {
+        const std::lock_guard lock(mutex_);
+        snapshot.services = services_;
+        procRoot = procRoot_;
+        diskPath = diskPath_;
+    }
 
     {
-        std::ifstream stat(procRoot_ + "/stat");
+        std::ifstream stat(procRoot + "/stat");
         std::string line;
         if (stat && std::getline(stat, line)) {
             snapshot.cpu = parseCpuStatLine(line);
@@ -102,7 +114,7 @@ HealthSnapshot HealthMonitor::collect(std::string* errorMessage) const
     }
 
     {
-        std::ifstream meminfo(procRoot_ + "/meminfo");
+        std::ifstream meminfo(procRoot + "/meminfo");
         std::ostringstream buffer;
         if (meminfo) {
             buffer << meminfo.rdbuf();
@@ -114,7 +126,7 @@ HealthSnapshot HealthMonitor::collect(std::string* errorMessage) const
     }
 
     struct statvfs stats {};
-    if (::statvfs(diskPath_.c_str(), &stats) == 0) {
+    if (::statvfs(diskPath.c_str(), &stats) == 0) {
         snapshot.disk = DiskInfo {
             static_cast<std::uint64_t>(stats.f_blocks) * stats.f_frsize,
             static_cast<std::uint64_t>(stats.f_bavail) * stats.f_frsize

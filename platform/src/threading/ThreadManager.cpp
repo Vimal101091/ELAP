@@ -1,6 +1,7 @@
 #include "elap/threading/ThreadManager.hpp"
 
 #include <exception>
+#include <thread>
 #include <utility>
 
 namespace elap::threading {
@@ -46,35 +47,36 @@ bool ThreadManager::startThread(const std::string& name, Worker worker)
     }
 
     auto stopRequested = std::make_shared<std::atomic_bool>(false);
-    threads_.push_back({
-        name,
-        stopRequested,
-        std::thread([this, name, stopToken = StopToken(stopRequested),
-                     worker = std::move(worker)]() mutable {
-            if (logger_ != nullptr) {
-                logger_->log(logging::LogLevel::Info, component_.c_str(),
-                             ("thread started: " + name).c_str());
-            }
+    threads_.reserve(threads_.size() + 1);
 
-            try {
-                worker(stopToken);
-            } catch (const std::exception& exception) {
-                if (logger_ != nullptr) {
-                    logger_->log(logging::LogLevel::Error, component_.c_str(), exception.what());
-                }
-            } catch (...) {
-                if (logger_ != nullptr) {
-                    logger_->log(logging::LogLevel::Error, component_.c_str(),
-                                 "thread terminated with unknown exception");
-                }
-            }
+    auto threadName = name;
+    std::thread thread([this, threadName, stopToken = StopToken(stopRequested),
+                        worker = std::move(worker)]() mutable {
+        if (logger_ != nullptr) {
+            logger_->log(logging::LogLevel::Info, component_.c_str(),
+                         ("thread started: " + threadName).c_str());
+        }
 
+        try {
+            worker(stopToken);
+        } catch (const std::exception& exception) {
             if (logger_ != nullptr) {
-                logger_->log(logging::LogLevel::Info, component_.c_str(),
-                             ("thread stopped: " + name).c_str());
+                logger_->log(logging::LogLevel::Error, component_.c_str(), exception.what());
             }
-        })
+        } catch (...) {
+            if (logger_ != nullptr) {
+                logger_->log(logging::LogLevel::Error, component_.c_str(),
+                             "thread terminated with unknown exception");
+            }
+        }
+
+        if (logger_ != nullptr) {
+            logger_->log(logging::LogLevel::Info, component_.c_str(),
+                         ("thread stopped: " + threadName).c_str());
+        }
     });
+
+    threads_.push_back({std::move(threadName), std::move(stopRequested), std::move(thread)});
     return true;
 }
 
@@ -96,7 +98,11 @@ void ThreadManager::joinAll()
 
     for (auto& managedThread : threads) {
         if (managedThread.thread.joinable()) {
-            managedThread.thread.join();
+            if (managedThread.thread.get_id() == std::this_thread::get_id()) {
+                managedThread.thread.detach();
+            } else {
+                managedThread.thread.join();
+            }
         }
     }
 }

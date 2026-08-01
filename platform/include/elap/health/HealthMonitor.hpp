@@ -1,8 +1,9 @@
 #pragma once
 
-#include "elap/service/ServiceApplication.hpp"
+#include "elap/service/ServiceState.hpp"
 
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -67,6 +68,7 @@ private:
     std::string procRoot_ {"/proc"};
     std::string diskPath_ {"/"};
     std::vector<ServiceHealth> services_;
+    mutable std::mutex mutex_;
 };
 
 } // namespace elap::health

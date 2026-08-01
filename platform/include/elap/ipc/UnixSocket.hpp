@@ -24,8 +24,15 @@ public:
     int nativeHandle() const;
 
     bool sendMessage(const std::string& message, std::string* errorMessage = nullptr);
+    bool sendMessage(const std::string& message,
+                     std::chrono::milliseconds timeout,
+                     std::string* errorMessage = nullptr);
     bool receiveMessage(std::string& message,
                         std::size_t maxSize = 1024 * 1024,
+                        std::string* errorMessage = nullptr);
+    bool receiveMessage(std::string& message,
+                        std::size_t maxSize,
+                        std::chrono::milliseconds timeout,
                         std::string* errorMessage = nullptr);
     void close();
 

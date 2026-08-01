@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <chrono>
 #include <string>
 
 namespace elap::ipc {
@@ -29,8 +30,16 @@ public:
     bool sendMessage(const std::string& message,
                      unsigned int priority = 0,
                      std::string* errorMessage = nullptr);
+    bool sendMessage(const std::string& message,
+                     unsigned int priority,
+                     std::chrono::milliseconds timeout,
+                     std::string* errorMessage = nullptr);
     bool receiveMessage(std::string& message,
                         unsigned int* priority = nullptr,
+                        std::string* errorMessage = nullptr);
+    bool receiveMessage(std::string& message,
+                        unsigned int* priority,
+                        std::chrono::milliseconds timeout,
                         std::string* errorMessage = nullptr);
 
     void close();

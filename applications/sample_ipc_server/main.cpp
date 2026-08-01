@@ -78,7 +78,10 @@ public:
                 }
 
                 std::string request;
-                if (!connection.receiveMessage(request, 64 * 1024, &error)) {
+                if (!connection.receiveMessage(request,
+                                               64 * 1024,
+                                               std::chrono::milliseconds(500),
+                                               &error)) {
                     logger_.log(elap::logging::LogLevel::Warning, name(), error.c_str());
                     continue;
                 }
@@ -86,7 +89,9 @@ public:
                 logger_.log(elap::logging::LogLevel::Info, name(),
                             ("received request: " + request).c_str());
 
-                if (!connection.sendMessage("sample_ipc_server:" + request, &error)) {
+                if (!connection.sendMessage("sample_ipc_server:" + request,
+                                            std::chrono::milliseconds(500),
+                                            &error)) {
                     logger_.log(elap::logging::LogLevel::Warning, name(), error.c_str());
                 }
             }

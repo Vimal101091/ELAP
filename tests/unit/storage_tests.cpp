@@ -110,6 +110,39 @@ void testDatabaseExecWithArgs()
     std::cout << "PASS: testDatabaseExecWithArgs" << std::endl;
 }
 
+void testDatabaseRejectsInvalidArgs()
+{
+    cleanupTestDb();
+    elap::storage::Database db;
+    std::string error;
+    assert(db.open(testDbPath));
+    assert(db.execute("CREATE TABLE test (key TEXT, value TEXT)"));
+
+    assert(!db.execWithArgs("INSERT INTO test (key, value) VALUES (?1, ?2)",
+                            1,
+                            nullptr,
+                            &error));
+    assert(!error.empty());
+
+    const char* values[] = {"key", "value"};
+    const int sizes[] = {3, -1};
+    const elap::storage::Database::BindType types[] = {
+        elap::storage::Database::BindType::Text,
+        elap::storage::Database::BindType::Text
+    };
+    error.clear();
+    assert(!db.execBind("INSERT INTO test (key, value) VALUES (?1, ?2)",
+                        2,
+                        values,
+                        sizes,
+                        types,
+                        &error));
+    assert(!error.empty());
+
+    db.close();
+    std::cout << "PASS: testDatabaseRejectsInvalidArgs" << std::endl;
+}
+
 void testDatabaseInvalidPath()
 {
     elap::storage::Database db;
@@ -261,6 +294,25 @@ void testPersistentStoreReportsClosedReadErrors()
     std::cout << "PASS: testPersistentStoreReportsClosedReadErrors" << std::endl;
 }
 
+void testPersistentStoreRejectsInvalidBlobInput()
+{
+    cleanupTestDb();
+    elap::storage::PersistentStore store;
+    std::string error;
+    assert(store.open(testDbPath));
+
+    assert(!store.putBlob("bad", nullptr, 1, &error));
+    assert(!error.empty());
+
+    error.clear();
+    assert(store.putBlob("empty", nullptr, 0, &error));
+    const auto blob = store.getBlob("empty", &error);
+    assert(blob.empty());
+
+    store.close();
+    std::cout << "PASS: testPersistentStoreRejectsInvalidBlobInput" << std::endl;
+}
+
 void testDatabaseConfigSetGet()
 {
     cleanupTestDb();
@@ -407,6 +459,7 @@ void runStorageTests()
     testDatabaseExecute();
     testDatabaseQuery();
     testDatabaseExecWithArgs();
+    testDatabaseRejectsInvalidArgs();
     testDatabaseInvalidPath();
     testDatabaseReopen();
 
@@ -417,6 +470,7 @@ void runStorageTests()
     testPersistentStoreClear();
     testPersistentStoreReopen();
     testPersistentStoreReportsClosedReadErrors();
+    testPersistentStoreRejectsInvalidBlobInput();
 
     testDatabaseConfigSetGet();
     testDatabaseConfigReopen();

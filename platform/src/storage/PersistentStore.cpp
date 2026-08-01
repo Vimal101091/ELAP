@@ -1,9 +1,18 @@
 #include "elap/storage/PersistentStore.hpp"
 
+#include <limits>
+
 namespace elap::storage {
 namespace {
 
 void restoreError(std::string* errorMessage, const std::string& message)
+{
+    if (errorMessage != nullptr) {
+        *errorMessage = message;
+    }
+}
+
+void setError(std::string* errorMessage, const std::string& message)
 {
     if (errorMessage != nullptr) {
         *errorMessage = message;
@@ -130,7 +139,21 @@ bool PersistentStore::has(const std::string& key, std::string* errorMessage) con
 bool PersistentStore::putBlob(const std::string& key, const void* data, std::size_t size,
                               std::string* errorMessage)
 {
-    const char* values[] = {key.c_str(), static_cast<const char*>(data)};
+    if (data == nullptr && size > 0) {
+        setError(errorMessage, "putBlob failed: data is null");
+        return false;
+    }
+    if (key.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())
+        || size > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        setError(errorMessage, "putBlob failed: key or blob is too large");
+        return false;
+    }
+
+    const char emptyBlob[] = "";
+    const char* values[] = {
+        key.c_str(),
+        size == 0 && data == nullptr ? emptyBlob : static_cast<const char*>(data)
+    };
     const int sizes[] = {static_cast<int>(key.size()), static_cast<int>(size)};
     const Database::BindType types[] = {Database::BindType::Text, Database::BindType::Blob};
     return db_.execBind(

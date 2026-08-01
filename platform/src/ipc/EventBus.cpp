@@ -66,10 +66,32 @@ bool MessageQueueEventBus::publish(const Event& event, std::string* errorMessage
     return queue_.sendMessage(encoded, 0, errorMessage);
 }
 
+bool MessageQueueEventBus::publish(const Event& event,
+                                   std::chrono::milliseconds timeout,
+                                   std::string* errorMessage)
+{
+    std::string encoded;
+    if (!encodeEvent(event, encoded, errorMessage)) {
+        return false;
+    }
+    return queue_.sendMessage(encoded, 0, timeout, errorMessage);
+}
+
 bool MessageQueueEventBus::receive(Event& event, std::string* errorMessage)
 {
     std::string encoded;
     if (!queue_.receiveMessage(encoded, nullptr, errorMessage)) {
+        return false;
+    }
+    return decodeEvent(encoded, event, errorMessage);
+}
+
+bool MessageQueueEventBus::receive(Event& event,
+                                   std::chrono::milliseconds timeout,
+                                   std::string* errorMessage)
+{
+    std::string encoded;
+    if (!queue_.receiveMessage(encoded, nullptr, timeout, errorMessage)) {
         return false;
     }
     return decodeEvent(encoded, event, errorMessage);

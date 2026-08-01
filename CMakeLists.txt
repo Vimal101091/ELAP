@@ -152,6 +152,7 @@ if(ELAP_BUILD_TESTS)
         tests/unit/health_tests.cpp
         tests/unit/ipc_tests.cpp
         tests/unit/logger_tests.cpp
+        tests/unit/service_application_tests.cpp
         tests/unit/storage_tests.cpp
         tests/unit/thread_manager_tests.cpp)
 

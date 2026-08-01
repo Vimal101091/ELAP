@@ -1,6 +1,7 @@
 #pragma once
 
 #include "elap/logging/ConsoleLogger.hpp"
+#include "elap/service/ServiceState.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -10,17 +11,6 @@
 namespace elap::service {
 
 class IService;
-
-enum class ServiceState {
-    Created,
-    Initializing,
-    Initialized,
-    Starting,
-    Running,
-    Stopping,
-    Stopped,
-    Failed
-};
 
 class ServiceApplication {
 public:
@@ -37,7 +27,5 @@ private:
     std::atomic<ServiceState> state_{ServiceState::Created};
     logging::ConsoleLogger logger_;
 };
-
-const char* toString(ServiceState state);
 
 } // namespace elap::service

@@ -107,6 +107,38 @@ void runUnixSocketValidationTest()
     ::unlink(regularFilePath.c_str());
 }
 
+void runUnixSocketTimeoutTest()
+{
+    const auto path = testSocketPath("ipc_timeout");
+    std::string error;
+
+    elap::ipc::UnixSocketServer server;
+    assert(server.listen(path, 1, &error));
+
+    bool receiveTimedOut = false;
+    std::thread serverThread([&server, &receiveTimedOut]() {
+        std::string localError;
+        auto connection = server.accept(&localError);
+        assert(connection.isOpen());
+
+        std::string message;
+        receiveTimedOut = !connection.receiveMessage(message,
+                                                     1024,
+                                                     std::chrono::milliseconds(25),
+                                                     &localError);
+        assert(!localError.empty());
+    });
+
+    auto client = elap::ipc::UnixSocketClient::connect(path, &error);
+    assert(client.isOpen());
+
+    serverThread.join();
+    assert(receiveTimedOut);
+
+    client.close();
+    server.close();
+}
+
 void runMessageQueueRoundTripTest()
 {
     const auto name = testObjectName("mq_round_trip");
@@ -136,6 +168,22 @@ void runMessageQueueRoundTripTest()
     elap::ipc::PosixMessageQueue duplicate;
     assert(!duplicate.create(name, 4, 128, &error));
     assert(!error.empty());
+
+    elap::ipc::PosixMessageQueue emptyQueue;
+    const auto timeoutName = testObjectName("mq_timeout");
+    assert(emptyQueue.create(timeoutName, 1, 64, &error));
+    assert(!emptyQueue.receiveMessage(message,
+                                      &priority,
+                                      std::chrono::milliseconds(10),
+                                      &error));
+    assert(!error.empty());
+    assert(emptyQueue.sendMessage("first", 0, &error));
+    assert(!emptyQueue.sendMessage("second",
+                                   0,
+                                   std::chrono::milliseconds(10),
+                                   &error));
+    assert(!error.empty());
+    emptyQueue.close();
 
     consumer.close();
     producer.close();
@@ -201,6 +249,10 @@ void runEventBusRoundTripTest()
     assert(!publisher.publish({"bad\ntopic", "payload"}, &error));
     assert(!error.empty());
 
+    elap::ipc::Event timeoutEvent;
+    assert(!subscriber.receive(timeoutEvent, std::chrono::milliseconds(10), &error));
+    assert(!error.empty());
+
     subscriber.close();
     publisher.close();
 }
@@ -209,6 +261,7 @@ void runIpcTests()
 {
     runUnixSocketRoundTripTest();
     runUnixSocketValidationTest();
+    runUnixSocketTimeoutTest();
     runMessageQueueRoundTripTest();
     runSharedMemoryRoundTripTest();
     runEventBusRoundTripTest();
