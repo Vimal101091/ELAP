@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 project(ELAP
     VERSION 0.1.0
     DESCRIPTION "Embedded Linux Application Platform"
-    LANGUAGES CXX)
+    LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,7 +14,13 @@ option(ELAP_BUILD_TESTS "Build ELAP unit tests" ON)
 find_package(Threads REQUIRED)
 
 add_library(elap_platform
+    platform/src/device/DeviceManager.cpp
+    platform/src/device/FileDevice.cpp
+    platform/src/device/GpioPin.cpp
+    platform/src/device/IDevice.cpp
     platform/src/config/KeyValueConfiguration.cpp
+    platform/src/config/DatabaseConfiguration.cpp
+    platform/src/health/HealthMonitor.cpp
     platform/src/ipc/EventBus.cpp
     platform/src/ipc/PosixMessageQueue.cpp
     platform/src/ipc/SharedMemory.cpp
@@ -22,16 +28,25 @@ add_library(elap_platform
     platform/src/logging/ConsoleLogger.cpp
     platform/src/service/ServiceApplication.cpp
     platform/src/signals/SignalHandler.cpp
-    platform/src/threading/ThreadManager.cpp)
+    platform/src/storage/Database.cpp
+    platform/src/storage/PersistentStore.cpp
+    platform/src/threading/ThreadManager.cpp
+    third_party/sqlite3/sqlite3.c)
 
 target_include_directories(elap_platform
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/platform/include)
+        ${CMAKE_CURRENT_SOURCE_DIR}/platform/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sqlite3)
 
 target_link_libraries(elap_platform
     PUBLIC
         Threads::Threads
-        rt)
+        rt
+        dl)
+
+set_source_files_properties(third_party/sqlite3/sqlite3.c
+    PROPERTIES
+        COMPILE_FLAGS "-w")
 
 target_compile_options(elap_platform
     PRIVATE
@@ -114,13 +129,30 @@ target_link_libraries(ipc_event_publisher
     PRIVATE
         elap_platform)
 
+add_executable(storage_demo
+    applications/storage_demo/main.cpp)
+
+target_link_libraries(storage_demo
+    PRIVATE
+        elap_platform)
+
+add_executable(storage_config_service
+    applications/storage_config_service/main.cpp)
+
+target_link_libraries(storage_config_service
+    PRIVATE
+        elap_platform)
+
 if(ELAP_BUILD_TESTS)
     enable_testing()
 
     add_executable(elap_unit_tests
         tests/unit/config_tests.cpp
+        tests/unit/device_tests.cpp
+        tests/unit/health_tests.cpp
         tests/unit/ipc_tests.cpp
         tests/unit/logger_tests.cpp
+        tests/unit/storage_tests.cpp
         tests/unit/thread_manager_tests.cpp)
 
     target_link_libraries(elap_unit_tests
@@ -175,4 +207,10 @@ if(ELAP_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/ipc_event_bus_process_test.sh
             $<TARGET_FILE:ipc_event_receiver>
             $<TARGET_FILE:ipc_event_publisher>)
+
+    add_test(
+        NAME storage_round_trip
+        COMMAND bash
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/storage_round_trip_test.sh
+            $<TARGET_FILE:storage_demo>)
 endif()

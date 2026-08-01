@@ -37,6 +37,15 @@ The shared memory API supports named region creation/opening, mapping,
 bounded read/write, and cleanup. It is intended for larger payloads where
 copying through sockets or queues would be wasteful.
 
+Shared memory currently provides data sharing only. It does not provide
+an inter-process critical-section primitive around repeated reads/writes.
+When multiple services need to protect a shared variable or atomic
+section, the platform should add a reusable IPC synchronization wrapper,
+such as a named POSIX semaphore, process-shared mutex, or lock guard
+abstraction. This prevents each service from manually repeating raw
+`sem_wait()` / `sem_post()` or process-shared mutex handling around
+shared memory access.
+
 The event bus is currently backed by POSIX message queues. It encodes
 events as a topic plus payload and provides publish/receive operations.
 
@@ -123,3 +132,9 @@ Recommended next activities:
    receive paths.
 3. Add service-framework samples that combine command IPC with shared
    memory data exchange.
+4. Add an inter-process synchronization primitive for shared data and
+   atomic sections, then document the required locking protocol for
+   shared memory users.
+5. Extend shared memory support beyond raw byte mapping with reusable
+   helpers for safe shared-data access, such as scoped locking,
+   consistency/version markers, and optional change notification.

@@ -1,9 +1,10 @@
 # Embedded Linux Application Platform (ELAP)
 
 ELAP is a reusable C++20 runtime foundation for embedded Linux
-applications. Phase 1 focuses on the core platform pieces needed to run
-long-lived user-space services with predictable startup, logging,
-configuration, worker thread management, and graceful shutdown.
+applications. The current implementation covers the Phase 1 core
+runtime, Phase 2 IPC primitives, Phase 3 SQLite-backed persistent
+storage, Phase 4 device framework foundations, and Phase 5 health
+monitoring foundations.
 
 ## Phase 1 Scope
 
@@ -31,9 +32,34 @@ Initial Phase 2 IPC support:
 - Unit coverage for Unix sockets, message queues, shared memory, and
   event bus behavior
 
-Later phases will expand IPC and add storage, device framework support,
-health monitoring, production logging backends, plugins, security, OTA,
-supervision, and Yocto integration.
+Phase 3 Storage support:
+
+- SQLite RAII wrapper with parameterized queries
+- Persistent key-value/blob store backed by SQLite
+- Atomic batch writes for database seeding
+- Database-backed `IConfiguration` implementation
+- Sample storage demo and config service executables
+- Unit and integration test coverage for storage modules
+
+Phase 4 Device Framework support:
+
+- Common `IDevice` lifecycle and state model
+- Device registry/manager for named devices
+- RAII file-device wrapper for Linux character-device endpoints
+- Sysfs-style GPIO pin wrapper with configurable root for tests
+- Unit coverage for file devices, manager behavior, and GPIO access
+
+Phase 5 Health Monitoring support:
+
+- CPU counter collection from proc-style `stat`
+- Memory collection from proc-style `meminfo`
+- Disk capacity collection with `statvfs`
+- Service health tracking from `ServiceState`
+- Unit coverage for parsers, snapshot collection, and service state
+  health derivation
+
+Later phases will add production logging backends, plugins, security,
+OTA, supervision, and Yocto integration.
 
 ## Requirements
 
@@ -65,6 +91,8 @@ This builds:
 - `build/ipc_shm_reader`
 - `build/ipc_event_receiver`
 - `build/ipc_event_publisher`
+- `build/storage_demo`
+- `build/storage_config_service`
 - `build/elap_unit_tests`
 
 ## Run Tests
@@ -83,7 +111,8 @@ You can also run the test executable directly:
 The CTest suite includes unit tests, sample service integration tests,
 a separate-process IPC echo round-trip test, and a service-framework IPC
 server/client round-trip test. It also validates process-level POSIX
-message queue, shared memory, and event bus round trips.
+message queue, shared memory, and event bus round trips, plus a storage
+demo round trip.
 
 ## Run Sample Service
 
@@ -154,6 +183,9 @@ messages.
 - [Project strategy](docs/ELAP_Project_Strategy.md)
 - [Phase 1 high-level design](docs/ELAP_Phase1_HLD.md)
 - [Phase 2 IPC design](docs/ELAP_Phase2_IPC.md)
+- [Phase 3 storage design](docs/ELAP_Phase3_Storage.md)
+- [Phase 4 device framework](docs/ELAP_Phase4_Device_Framework.md)
+- [Phase 5 health monitoring](docs/ELAP_Phase5_Health_Monitoring.md)
 - [Periodic sensor read flow](docs/PeriodicSensorReadFlow.md)
 
 ## Current Phase 1 Status
@@ -169,3 +201,30 @@ and event bus support. Each IPC primitive has unit coverage and
 process-level integration coverage. The next recommended activity is to
 decide whether the event bus should support fan-out delivery, topic
 filtering, or multiple backend transports.
+
+## Current Phase 3 Status
+
+Phase 3 has SQLite-based persistent storage with three layers: a
+low-level RAII database wrapper, a schema-managed key-value store, and a
+database-backed configuration implementation. Configuration seeding now
+parses and validates the full seed file before committing changes, so
+invalid files do not partially update the database. Store read paths also
+propagate lower-level query errors through the existing error-message
+out-parameter. The SQLite source is bundled as an amalgamation under
+`third_party/sqlite3/` so no external development package is required.
+
+Current verification status: `cmake --build build` and
+`ctest --output-on-failure` pass with 9/9 tests.
+
+## Current Phase 4 Status
+
+Phase 4 has a common device lifecycle, a named device manager, a
+file-descriptor-backed device wrapper, and a sysfs-style GPIO wrapper.
+This is the foundation for UART, SPI, I2C, CAN, and USB adapters.
+
+## Current Phase 5 Status
+
+Phase 5 has a local health monitor that collects CPU, memory, disk, and
+service-state health snapshots. The collector accepts configurable proc
+and disk paths so it can be tested without relying on host-specific
+values.
